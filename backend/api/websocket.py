@@ -5,6 +5,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from typing import List
 import asyncio
 import json
+import os
 
 router = APIRouter()
 
@@ -25,7 +26,7 @@ async def broadcast_log(log_type: str, message: str, data: dict = None):
     for client in _clients:
         try:
             await client.send_text(payload)
-        except:
+        except Exception:
             disconnected.append(client)
     
     # Clean up disconnected clients
@@ -36,6 +37,12 @@ async def broadcast_log(log_type: str, message: str, data: dict = None):
 @router.websocket("/ws/logs")
 async def websocket_logs(websocket: WebSocket):
     """WebSocket endpoint for real-time log streaming."""
+    api_key = os.getenv("SENTINEL_API_KEY", "")
+    if api_key:
+        token = websocket.query_params.get("token", "")
+        if token != api_key:
+            await websocket.close(code=4001, reason="Unauthorized")
+            return
     await websocket.accept()
     _clients.append(websocket)
     
