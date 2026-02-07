@@ -1,58 +1,79 @@
 """
 Bili-Sentinel Database Module
+Singleton connection with asyncio.Lock for concurrency safety.
 """
+import asyncio
 import aiosqlite
 from pathlib import Path
 from backend.config import DATABASE_PATH
+from backend.logger import logger
 
+_connection: aiosqlite.Connection | None = None
+_lock = asyncio.Lock()
 _db_initialized = False
 
 
-async def get_db() -> aiosqlite.Connection:
-    """Get a database connection."""
-    db = await aiosqlite.connect(DATABASE_PATH)
-    db.row_factory = aiosqlite.Row
-    return db
+async def _get_connection() -> aiosqlite.Connection:
+    """Get or create the singleton database connection."""
+    global _connection
+    if _connection is None:
+        _connection = await aiosqlite.connect(DATABASE_PATH)
+        _connection.row_factory = aiosqlite.Row
+        await _connection.execute("PRAGMA journal_mode=WAL")
+    return _connection
 
 
 async def init_db():
-    """Initialize database with schema."""
+    """Initialize database with schema (runs once)."""
     global _db_initialized
     if _db_initialized:
         return
-    
+
     schema_path = Path(__file__).parent / "db" / "schema.sql"
-    
-    async with aiosqlite.connect(DATABASE_PATH) as db:
+
+    async with _lock:
+        if _db_initialized:
+            return
+        conn = await _get_connection()
         with open(schema_path, "r", encoding="utf-8") as f:
             schema = f.read()
-        await db.executescript(schema)
-        await db.commit()
-    
-    _db_initialized = True
-    print(f"Database initialized at {DATABASE_PATH}")
+        await conn.executescript(schema)
+        await conn.commit()
+        _db_initialized = True
+        logger.info("Database initialized at %s", DATABASE_PATH)
 
 
 async def execute_query(query: str, params: tuple = ()):
     """Execute a query and return results."""
-    async with aiosqlite.connect(DATABASE_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cursor = await db.execute(query, params)
+    async with _lock:
+        conn = await _get_connection()
+        cursor = await conn.execute(query, params)
         rows = await cursor.fetchall()
-        await db.commit()
+        await conn.commit()
         return [dict(row) for row in rows]
 
 
 async def execute_insert(query: str, params: tuple = ()) -> int:
     """Execute an insert and return the last row id."""
-    async with aiosqlite.connect(DATABASE_PATH) as db:
-        cursor = await db.execute(query, params)
-        await db.commit()
+    async with _lock:
+        conn = await _get_connection()
+        cursor = await conn.execute(query, params)
+        await conn.commit()
         return cursor.lastrowid
 
 
 async def execute_many(query: str, params_list: list):
     """Execute a query with multiple parameter sets."""
-    async with aiosqlite.connect(DATABASE_PATH) as db:
-        await db.executemany(query, params_list)
-        await db.commit()
+    async with _lock:
+        conn = await _get_connection()
+        await conn.executemany(query, params_list)
+        await conn.commit()
+
+
+async def close_db():
+    """Close the database connection."""
+    global _connection
+    if _connection is not None:
+        await _connection.close()
+        _connection = None
+        logger.info("Database connection closed")

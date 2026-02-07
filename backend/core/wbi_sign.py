@@ -32,9 +32,13 @@ class BilibiliSign:
         # 2. Sort parameters by key
         sorted_params = dict(sorted(params.items()))
         
-        # 3. Filter and URL-encode
-        # Remove unwanted characters from values before encoding if necessary
-        # Bilibili's WBI specifically requires some characters to be escaped/normalized
+        # 3. Filter special characters from values (B站 WBI requirement)
+        def _filter_value(v):
+            s = str(v)
+            for ch in "!'()*":
+                s = s.replace(ch, "")
+            return s
+        sorted_params = {k: _filter_value(v) for k, v in sorted_params.items()}
         query = urllib.parse.urlencode(sorted_params)
         
         # 4. Concatenate with mixin_key and MD5

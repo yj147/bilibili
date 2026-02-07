@@ -6,12 +6,12 @@ import {
   Calendar, Clock, Play, Pause, RefreshCw, History,
   CheckCircle2, AlertCircle, Plus, Loader2, X, Trash2
 } from "lucide-react";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "/api";
+import { api } from "@/lib/api";
+import type { ScheduledTask, ReportLog } from "@/lib/types";
 
 export default function SchedulerPage() {
-  const [tasks, setTasks] = useState<any[]>([]);
-  const [history, setHistory] = useState<any[]>([]);
+  const [tasks, setTasks] = useState<ScheduledTask[]>([]);
+  const [history, setHistory] = useState<ReportLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [formData, setFormData] = useState({
@@ -23,8 +23,8 @@ export default function SchedulerPage() {
     try {
       setLoading(true);
       const [taskRes, histRes] = await Promise.all([
-        fetch(`${API_BASE}/scheduler/tasks`).then(r => r.json()),
-        fetch(`${API_BASE}/scheduler/history?limit=20`).then(r => r.json()),
+        api.scheduler.getTasks(),
+        api.scheduler.getHistory(20),
       ]);
       setTasks(taskRes);
       setHistory(histRes);
@@ -39,12 +39,12 @@ export default function SchedulerPage() {
 
   const handleCreate = async () => {
     try {
-      const body: any = { name: formData.name, task_type: formData.task_type };
+      const body: { name: string; task_type: string; cron_expression?: string; interval_seconds?: number } = {
+        name: formData.name, task_type: formData.task_type
+      };
       if (formData.cron_expression) body.cron_expression = formData.cron_expression;
       else body.interval_seconds = formData.interval_seconds;
-      await fetch(`${API_BASE}/scheduler/tasks`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
-      });
+      await api.scheduler.createTask(body);
       setShowAddModal(false);
       setFormData({ name: "", task_type: "report_batch", cron_expression: "", interval_seconds: 300 });
       fetchData();
@@ -53,7 +53,7 @@ export default function SchedulerPage() {
 
   const handleToggle = async (id: number) => {
     try {
-      await fetch(`${API_BASE}/scheduler/tasks/${id}/toggle`, { method: "POST" });
+      await api.scheduler.toggleTask(id);
       fetchData();
     } catch { alert("操作失败"); }
   };
@@ -61,7 +61,7 @@ export default function SchedulerPage() {
   const handleDelete = async (id: number) => {
     if (!confirm("确定删除此任务？")) return;
     try {
-      await fetch(`${API_BASE}/scheduler/tasks/${id}`, { method: "DELETE" });
+      await api.scheduler.deleteTask(id);
       fetchData();
     } catch { alert("删除失败"); }
   };
@@ -137,7 +137,7 @@ export default function SchedulerPage() {
           <div className="glass-card rounded-3xl p-6 border-white/5 h-[500px] overflow-y-auto custom-scrollbar">
             {history.length === 0 ? (
               <div className="text-center text-white/20 py-10 text-sm italic">暂无执行记录</div>
-            ) : history.map((log: any, i: number) => (
+            ) : history.map((log, i) => (
               <div key={log.id || i} className="flex items-center gap-3 py-3 border-b border-white/5 last:border-none">
                 {log.success ? <CheckCircle2 size={14} className="text-green-500" /> : <AlertCircle size={14} className="text-red-500" />}
                 <div className="flex-1">

@@ -13,13 +13,19 @@ async function handler(req: NextRequest) {
     }
   });
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+
   try {
     const resp = await fetch(targetUrl, {
       method: req.method,
       headers,
       body: req.method !== "GET" && req.method !== "HEAD" ? await req.text() : undefined,
       redirect: "follow",
+      signal: controller.signal,
     });
+
+    clearTimeout(timeout);
 
     const body = await resp.text();
     const respHeaders = new Headers();
@@ -34,6 +40,13 @@ async function handler(req: NextRequest) {
       headers: respHeaders,
     });
   } catch (err) {
+    clearTimeout(timeout);
+    if (err instanceof DOMException && err.name === "AbortError") {
+      return NextResponse.json(
+        { detail: "Backend timeout" },
+        { status: 504 }
+      );
+    }
     return NextResponse.json(
       { detail: "Backend unavailable" },
       { status: 502 }

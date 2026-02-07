@@ -7,9 +7,10 @@ import {
   CheckCircle2, Filter, User, MessageCircle, Loader2, RefreshCw, X
 } from "lucide-react";
 import { api } from "@/lib/api";
+import type { Target as TargetType } from "@/lib/types";
 
 export default function TargetsPage() {
-  const [targets, setTargets] = useState<any[]>([]);
+  const [targets, setTargets] = useState<TargetType[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [executingId, setExecutingId] = useState<number | null>(null);
@@ -59,7 +60,7 @@ export default function TargetsPage() {
     const identifiers = batchData.identifiers.split("\n").map(s => s.trim()).filter(Boolean);
     if (identifiers.length === 0) { alert("请输入至少一个目标"); return; }
     try {
-      await api.targets.createBatch({ type: batchData.type, identifiers, reason_id: batchData.reason_id, reason_text: batchData.reason_text });
+      await api.targets.createBatch({ targets: identifiers.map(id => ({ type: batchData.type, identifier: id })) });
       setShowBatchModal(false);
       setBatchData({ type: "video", identifiers: "", reason_id: 1, reason_text: "" });
       fetchTargets();

@@ -8,9 +8,10 @@ import {
   CornerDownRight, Save, Zap, Loader2, X
 } from "lucide-react";
 import { api } from "@/lib/api";
+import type { AutoReplyConfig } from "@/lib/types";
 
 export default function AutoReplyPage() {
-  const [rules, setRules] = useState<any[]>([]);
+  const [rules, setRules] = useState<AutoReplyConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [formData, setFormData] = useState({ keyword: "", response: "", priority: 0 });
@@ -25,9 +26,9 @@ export default function AutoReplyPage() {
         api.autoreply.getConfigs(),
         api.autoreply.getStatus()
       ]);
-      const defaultConfig = configs.find((c: any) => c.keyword === null);
+      const defaultConfig = configs.find((c) => c.keyword === null);
       if (defaultConfig) setDefaultReply(defaultConfig.response);
-      setRules(configs.filter((c: any) => c.keyword !== null));
+      setRules(configs.filter((c) => c.keyword !== null));
       setServiceStatus(status);
     } catch (err) {
       console.error("Failed to fetch autoreply data", err);
@@ -40,7 +41,7 @@ export default function AutoReplyPage() {
 
   const handleAddRule = async () => {
     try {
-      await api.autoreply.createConfig(formData);
+      await api.autoreply.createConfig({ ...formData, is_active: true });
       setShowAddModal(false);
       setFormData({ keyword: "", response: "", priority: 0 });
       fetchData();
@@ -52,7 +53,7 @@ export default function AutoReplyPage() {
     try { await api.autoreply.deleteConfig(id); fetchData(); } catch { alert("删除失败"); }
   };
 
-  const handleToggleRule = async (rule: any) => {
+  const handleToggleRule = async (rule: AutoReplyConfig) => {
     try {
       await api.autoreply.updateConfig(rule.id, { is_active: !rule.is_active });
       fetchData();
@@ -62,11 +63,11 @@ export default function AutoReplyPage() {
   const handleSaveDefault = async () => {
     try {
       const configs = await api.autoreply.getConfigs();
-      const existing = configs.find((c: any) => c.keyword === null);
+      const existing = configs.find((c) => c.keyword === null);
       if (existing) {
         await api.autoreply.updateConfig(existing.id, { response: defaultReply });
       } else {
-        await api.autoreply.createConfig({ keyword: null, response: defaultReply, priority: -1 });
+        await api.autoreply.createConfig({ keyword: null, response: defaultReply, priority: -1, is_active: true });
       }
       alert("全局配置已保存");
     } catch { alert("保存失败"); }

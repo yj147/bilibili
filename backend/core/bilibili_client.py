@@ -1,4 +1,5 @@
 import httpx
+import json
 import random
 import asyncio
 import time
@@ -29,6 +30,17 @@ class BilibiliClient:
             "Sec-Fetch-Mode": "cors",
             "Sec-Fetch-Site": "same-site",
         }
+        self._client = httpx.AsyncClient(cookies=self.cookies, headers=self.headers, timeout=10.0)
+
+    async def close(self):
+        """Close the underlying httpx client."""
+        await self._client.aclose()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()
 
     async def _request(self, method: str, url: str, params: dict = None, data: dict = None, sign: bool = False, retries: int = 3):
         """Internal request helper with rate-limit handling and retries."""
@@ -41,13 +53,12 @@ class BilibiliClient:
             params = signer.sign(params)
 
         for attempt in range(retries):
-            async with httpx.AsyncClient(cookies=self.cookies, headers=self.headers, timeout=10.0) as client:
                 if method == "POST":
                     # Add CSRF token for POST requests
                     data["csrf"] = self.cookies.get("bili_jct", "")
-                    resp = await client.post(url, params=params, data=data)
+                    resp = await self._client.post(url, params=params, data=data)
                 else:
-                    resp = await client.get(url, params=params)
+                    resp = await self._client.get(url, params=params)
                 
                 res_json = resp.json()
                 
@@ -137,7 +148,7 @@ class BilibiliClient:
             "msg[receiver_id]": receiver_id,
             "msg[receiver_type]": 1,
             "msg[msg_type]": 1,
-            "msg[content]": f'{{"content":"{content}"}}',
+            "msg[content]": json.dumps({"content": content}),
             "msg[dev_id]": self.cookies.get("buvid3", ""),
             "msg[timestamp]": int(time.time()),
             "csrf": self.cookies.get("bili_jct", "")

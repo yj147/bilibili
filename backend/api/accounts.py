@@ -38,13 +38,17 @@ async def get_account(account_id: int):
     return rows[0]
 
 
+# Whitelist of fields allowed in dynamic UPDATE statements
+ACCOUNT_ALLOWED_UPDATE_FIELDS = {"name", "sessdata", "bili_jct", "buvid3", "group_tag", "is_active"}
+
+
 @router.put("/{account_id}", response_model=Account)
 async def update_account(account_id: int, account: AccountUpdate):
     """Update an account."""
     updates = []
     params = []
     for field, value in account.model_dump(exclude_unset=True).items():
-        if value is not None:
+        if value is not None and field in ACCOUNT_ALLOWED_UPDATE_FIELDS:
             updates.append(f"{field} = ?")
             params.append(value)
     

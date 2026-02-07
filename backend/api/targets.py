@@ -82,13 +82,17 @@ async def get_target(target_id: int):
     return rows[0]
 
 
+# Whitelist of fields allowed in dynamic UPDATE statements
+TARGET_ALLOWED_UPDATE_FIELDS = {"reason_id", "reason_text", "status"}
+
+
 @router.put("/{target_id}", response_model=Target)
 async def update_target(target_id: int, target: TargetUpdate):
     """Update a target."""
     updates = []
     params = []
     for field, value in target.model_dump(exclude_unset=True).items():
-        if value is not None:
+        if value is not None and field in TARGET_ALLOWED_UPDATE_FIELDS:
             updates.append(f"{field} = ?")
             params.append(value)
     
@@ -120,5 +124,7 @@ async def delete_target(target_id: int):
 @router.delete("/")
 async def delete_targets_by_status(status: str = Query(...)):
     """Delete all targets with a specific status."""
-    result = await execute_query("DELETE FROM targets WHERE status = ? RETURNING id", (status,))
-    return {"message": f"Deleted {len(result)} targets", "count": len(result)}
+    count_rows = await execute_query("SELECT COUNT(*) as count FROM targets WHERE status = ?", (status,))
+    count = count_rows[0]["count"] if count_rows else 0
+    await execute_query("DELETE FROM targets WHERE status = ?", (status,))
+    return {"message": f"Deleted {count} targets", "count": count}

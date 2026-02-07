@@ -72,3 +72,18 @@ class BilibiliAuth:
 
     def get_wbi_keys(self) -> tuple[str, str]:
         return self.wbi_keys["img_key"], self.wbi_keys["sub_key"]
+
+    @classmethod
+    def from_db_account(cls, account_dict: dict, wbi_keys: dict = None) -> "BilibiliAuth":
+        """Create a BilibiliAuth instance from a database account dict."""
+        instance = cls.__new__(cls)
+        instance.credentials_path = ""
+        instance.accounts = [{
+            "name": account_dict.get("name", ""),
+            "SESSDATA": account_dict.get("sessdata", ""),
+            "bili_jct": account_dict.get("bili_jct", ""),
+            "buvid3": account_dict.get("buvid3", ""),
+            "uid": account_dict.get("uid", 0),
+        }]
+        instance.wbi_keys = wbi_keys or {"img_key": "", "sub_key": ""}
+        return instance

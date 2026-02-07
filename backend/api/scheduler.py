@@ -87,11 +87,7 @@ async def _run_autoreply_poll(task_id: int):
 
     for account in accounts:
         try:
-            auth = BilibiliAuth.__new__(BilibiliAuth)
-            auth.accounts = [{"name": account["name"], "SESSDATA": account["sessdata"],
-                "bili_jct": account["bili_jct"], "buvid3": account.get("buvid3", ""),
-                "uid": account.get("uid", 0)}]
-            auth.wbi_keys = {"img_key": "", "sub_key": ""}
+            auth = BilibiliAuth.from_db_account(account)
             client = BilibiliClient(auth, account_index=0)
             sessions = await client.get_recent_sessions()
             if sessions.get("code") == 0:

@@ -15,9 +15,10 @@ import {
   Loader2
 } from "lucide-react";
 import { api } from "@/lib/api";
+import type { Account } from "@/lib/types";
 
 export default function AccountsPage() {
-  const [accounts, setAccounts] = useState<any[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);

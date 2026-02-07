@@ -14,7 +14,7 @@ import {
   Info
 } from "lucide-react";
 
-const ConfigSection = ({ title, icon: Icon, children }: any) => (
+const ConfigSection = ({ title, icon: Icon, children }: { title: string; icon: React.ElementType; children: React.ReactNode }) => (
   <div className="glass-card rounded-3xl p-8 border-white/5 space-y-6">
     <div className="flex items-center gap-3 border-b border-white/5 pb-4">
       <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400">
@@ -28,7 +28,7 @@ const ConfigSection = ({ title, icon: Icon, children }: any) => (
   </div>
 );
 
-const ConfigItem = ({ label, description, children }: any) => (
+const ConfigItem = ({ label, description, children }: { label: string; description: string; children: React.ReactNode }) => (
   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
     <div className="max-w-md">
       <p className="text-sm font-semibold mb-1">{label}</p>

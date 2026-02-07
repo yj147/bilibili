@@ -2,10 +2,13 @@
 Bili-Sentinel FastAPI Application Entry Point
 """
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.database import init_db
+from backend.database import init_db, close_db
+from backend.logger import logger
+from backend.middleware import register_exception_handlers
+from backend.auth import verify_api_key
 from backend.api import accounts, targets, reports, autoreply, scheduler, websocket
 
 
@@ -13,16 +16,17 @@ from backend.api import accounts, targets, reports, autoreply, scheduler, websoc
 async def lifespan(app: FastAPI):
     """Application lifespan: startup and shutdown."""
     # Startup
-    print("🚀 Bili-Sentinel starting up...")
+    logger.info("Bili-Sentinel starting up...")
     await init_db()
-    print("✅ Database initialized")
+    logger.info("Database initialized")
     from backend.api.scheduler import start_scheduler, stop_scheduler
     await start_scheduler()
-    print("✅ Scheduler started")
+    logger.info("Scheduler started")
     yield
     # Shutdown
     stop_scheduler()
-    print("🛑 Bili-Sentinel shutting down...")
+    await close_db()
+    logger.info("Bili-Sentinel shutting down...")
 
 
 app = FastAPI(
@@ -30,7 +34,11 @@ app = FastAPI(
     description="Bilibili 自动化管理工具 API",
     version="1.0.0",
     lifespan=lifespan,
+    dependencies=[Depends(verify_api_key)],
 )
+
+# Unified error handling
+register_exception_handlers(app)
 
 # CORS for frontend
 app.add_middleware(

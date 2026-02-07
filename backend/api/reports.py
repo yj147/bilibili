@@ -21,15 +21,8 @@ async def _execute_single_report(target: dict, account: dict) -> ReportResult:
     from backend.core.bilibili_auth import BilibiliAuth
     
     try:
-        # Create temporary auth object
-        auth = BilibiliAuth.__new__(BilibiliAuth)
-        auth.accounts = [{
-            "name": account["name"],
-            "SESSDATA": account["sessdata"],
-            "bili_jct": account["bili_jct"],
-            "buvid3": account.get("buvid3", "")
-        }]
-        auth.wbi_keys = {"img_key": "", "sub_key": ""}
+        # Create auth object from DB account
+        auth = BilibiliAuth.from_db_account(account)
         
         client = BilibiliClient(auth, account_index=0)
         
