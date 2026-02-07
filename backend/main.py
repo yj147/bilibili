@@ -17,6 +17,9 @@ async def lifespan(app: FastAPI):
     """Application lifespan: startup and shutdown."""
     # Startup
     logger.info("Bili-Sentinel starting up...")
+    import os as _os
+    if (_os.cpu_count() or 1) > 1:
+        logger.warning("Bili-Sentinel 必须以单 worker 模式运行 (--workers 1)")
     await init_db()
     logger.info("Database initialized")
     from backend.api.scheduler import start_scheduler, stop_scheduler

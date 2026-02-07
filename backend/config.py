@@ -25,6 +25,9 @@ DEBUG = os.getenv("SENTINEL_DEBUG", "true").lower() == "true"
 HTTP_TIMEOUT = float(os.getenv("SENTINEL_HTTP_TIMEOUT", "10.0"))
 MAX_RETRIES = int(os.getenv("SENTINEL_MAX_RETRIES", "3"))
 
+# Worker settings
+WORKERS = int(os.getenv("SENTINEL_WORKERS", "1"))
+
 # Anti-detection settings
 MIN_DELAY = 2.0  # seconds
 MAX_DELAY = 10.0  # seconds
