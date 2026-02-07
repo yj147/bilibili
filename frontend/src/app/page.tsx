@@ -12,14 +12,31 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { useAccounts, useTargets, useReportLogs } from "@/lib/swr";
+import { useLogStream } from "@/lib/websocket";
 import BentoCard from "@/components/BentoCard";
 import StatItem from "@/components/StatItem";
 
 export default function Dashboard() {
   const { data: accounts = [], mutate: mutateAccounts } = useAccounts();
   const { data: targetData } = useTargets();
-  const { data: logs = [] } = useReportLogs(15);
+  const { data: apiLogs = [] } = useReportLogs(15);
+  const { logs: wsLogs, connected: wsConnected } = useLogStream(50);
   const loading = !accounts;
+
+  // Merge WS logs (real-time) with API logs (historical), WS first
+  const wsAsReportLogs = wsLogs.map((entry, i) => ({
+    id: -(i + 1),
+    target_id: entry.data?.target_id ?? 0,
+    account_id: entry.data?.account_id ?? null,
+    account_name: entry.data?.account_name ?? 'system',
+    action: entry.message || entry.type,
+    request_data: null,
+    response_data: null,
+    success: entry.type !== 'error',
+    error_message: entry.type === 'error' ? entry.message : null,
+    executed_at: new Date(entry.timestamp).toISOString(),
+  }));
+  const logs = [...wsAsReportLogs, ...apiLogs.filter(al => !wsAsReportLogs.some(wl => wl.action === al.action && Math.abs(new Date(wl.executed_at).getTime() - new Date(al.executed_at).getTime()) < 2000))].slice(0, 50);
 
   const activeCount = accounts.filter((a) => a.status === "valid").length;
   const health = accounts.length > 0 ? Math.round((activeCount / accounts.length) * 100) : 0;
@@ -129,8 +146,8 @@ export default function Dashboard() {
             <div className="flex items-center gap-2 text-xs text-green-400 bg-green-400/10 p-2 rounded">
               <CheckCircle2 size={12} /> UA 自动轮换开启
             </div>
-            <div className="flex items-center gap-2 text-xs text-blue-400 bg-blue-400/10 p-2 rounded">
-              <Activity size={12} className="animate-pulse" /> 实时链路已打通
+            <div className={`flex items-center gap-2 text-xs p-2 rounded ${wsConnected ? 'text-blue-400 bg-blue-400/10' : 'text-yellow-400 bg-yellow-400/10'}`}>
+              <Activity size={12} className={wsConnected ? "animate-pulse" : ""} /> {wsConnected ? 'WebSocket 实时链路已打通' : 'WebSocket 连接中...'}
             </div>
             <div className="flex items-center gap-2 text-xs text-purple-400 bg-purple-400/10 p-2 rounded">
               <ShieldCheck size={12} /> 后端引擎 v1.0 运行中
