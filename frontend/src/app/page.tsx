@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { motion } from "framer-motion";
 import {
   Users,
@@ -11,57 +11,24 @@ import {
   RefreshCw,
   CheckCircle2,
 } from "lucide-react";
-import { api } from "@/lib/api";
-import type { Account, ReportLog, TargetListResponse } from "@/lib/types";
+import { useAccounts, useTargets, useReportLogs } from "@/lib/swr";
 import BentoCard from "@/components/BentoCard";
 import StatItem from "@/components/StatItem";
 
 export default function Dashboard() {
-  const [stats, setStats] = useState({
-    accounts: 0,
-    targets: 0,
-    logs: 0,
-    health: 0,
-  });
-  const [logs, setLogs] = useState<ReportLog[]>([]);
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: accounts = [], mutate: mutateAccounts } = useAccounts();
+  const { data: targetData } = useTargets();
+  const { data: logs = [] } = useReportLogs(15);
+  const loading = !accounts;
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const [accList, targetList, logList] = await Promise.all([
-        api.accounts.list(),
-        api.targets.list(),
-        api.reports.getLogs(15),
-      ]);
-
-      const activeCount = accList.filter((a) => a.status === "valid").length;
-      const health =
-        accList.length > 0
-          ? Math.round((activeCount / accList.length) * 100)
-          : 0;
-
-      setAccounts(accList);
-      setLogs(logList);
-      setStats({
-        accounts: accList.length,
-        targets: targetList.total,
-        logs: logList.filter((l) => l.success).length,
-        health: health,
-      });
-    } catch (err) {
-      console.error("Dashboard sync failed", err);
-    } finally {
-      setLoading(false);
-    }
+  const activeCount = accounts.filter((a) => a.status === "valid").length;
+  const health = accounts.length > 0 ? Math.round((activeCount / accounts.length) * 100) : 0;
+  const stats = {
+    accounts: accounts.length,
+    targets: targetData?.total ?? 0,
+    logs: logs.filter((l) => l.success).length,
+    health,
   };
-
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 10000);
-    return () => clearInterval(interval);
-  }, []);
 
   return (
     <div className="min-h-screen bg-black text-white p-4 md:p-8 relative overflow-hidden">
@@ -85,7 +52,7 @@ export default function Dashboard() {
         </div>
         <div className="flex gap-4">
           <button
-            onClick={fetchData}
+            onClick={() => mutateAccounts()}
             className="glass-card px-4 py-2 rounded-lg flex items-center gap-2 text-sm hover:bg-white/10 transition-colors"
           >
             <RefreshCw size={16} className={loading ? "animate-spin" : ""} />{" "}

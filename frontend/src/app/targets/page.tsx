@@ -1,49 +1,35 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
 import {
   Target, Plus, Upload, Trash2, Play, AlertTriangle,
   CheckCircle2, Filter, User, MessageCircle, Loader2, RefreshCw, X
 } from "lucide-react";
 import { api } from "@/lib/api";
-import type { Target as TargetType } from "@/lib/types";
+import { useTargets } from "@/lib/swr";
 
 export default function TargetsPage() {
-  const [targets, setTargets] = useState<TargetType[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const { data: targetData, mutate, isLoading } = useTargets();
+  const targets = targetData?.items ?? [];
+  const total = targetData?.total ?? 0;
+  const loading = isLoading;
   const [executingId, setExecutingId] = useState<number | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [formData, setFormData] = useState({ type: "video" as string, identifier: "", reason_id: 1, reason_text: "" });
   const [batchData, setBatchData] = useState({ type: "video" as string, identifiers: "", reason_id: 1, reason_text: "" });
 
-  const fetchTargets = async () => {
-    try {
-      setLoading(true);
-      const data = await api.targets.list();
-      setTargets(data.items);
-      setTotal(data.total);
-    } catch (err) {
-      console.error("Failed to fetch targets", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { fetchTargets(); }, []);
-
   const handleExecute = async (id: number) => {
     setExecutingId(id);
-    try { await api.reports.execute(id); fetchTargets(); }
+    try { await api.reports.execute(id); mutate(); }
     catch { alert("执行失败，请检查账号状态"); }
     finally { setExecutingId(null); }
   };
 
   const handleDelete = async (id: number) => {
     if (!confirm("确定删除此目标？")) return;
-    try { await api.targets.delete(id); fetchTargets(); }
+    try { await api.targets.delete(id); mutate(); }
     catch { alert("删除失败"); }
   };
 
@@ -52,7 +38,7 @@ export default function TargetsPage() {
       await api.targets.create(formData);
       setShowAddModal(false);
       setFormData({ type: "video", identifier: "", reason_id: 1, reason_text: "" });
-      fetchTargets();
+      mutate();
     } catch { alert("添加失败"); }
   };
 
@@ -63,14 +49,14 @@ export default function TargetsPage() {
       await api.targets.createBatch({ targets: identifiers.map(id => ({ type: batchData.type, identifier: id })) });
       setShowBatchModal(false);
       setBatchData({ type: "video", identifiers: "", reason_id: 1, reason_text: "" });
-      fetchTargets();
+      mutate();
     } catch { alert("批量添加失败"); }
   };
 
   const handleExecuteAll = async () => {
     const pendingIds = targets.filter(t => t.status === 'pending').map(t => t.id);
     if (pendingIds.length === 0) { alert("没有待处理目标"); return; }
-    try { await api.reports.executeBatch(pendingIds); fetchTargets(); }
+    try { await api.reports.executeBatch(pendingIds); mutate(); }
     catch { alert("批量执行失败"); }
   };
 
@@ -93,7 +79,7 @@ export default function TargetsPage() {
           <p className="text-white/40 text-sm mt-1">管理待处理的 BV 号、UID 或评论，设定举报理由与优先级</p>
         </div>
         <div className="flex gap-3">
-          <button onClick={fetchTargets} className="glass-card px-4 py-2 rounded-xl text-sm flex items-center gap-2 hover:bg-white/5 transition-colors">
+          <button onClick={() => mutate()} className="glass-card px-4 py-2 rounded-xl text-sm flex items-center gap-2 hover:bg-white/5 transition-colors">
             <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> 刷新
           </button>
           <button onClick={() => setShowAddModal(true)} className="glass-card px-4 py-2 rounded-xl text-sm flex items-center gap-2 hover:bg-white/5 transition-colors">

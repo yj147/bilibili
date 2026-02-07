@@ -8,55 +8,43 @@ import {
   CornerDownRight, Save, Zap, Loader2, X
 } from "lucide-react";
 import { api } from "@/lib/api";
-import type { AutoReplyConfig } from "@/lib/types";
+import { useAutoReplyConfigs, useAutoReplyStatus } from "@/lib/swr";
 
 export default function AutoReplyPage() {
-  const [rules, setRules] = useState<AutoReplyConfig[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: configs = [], mutate: mutateConfigs, isLoading: configsLoading } = useAutoReplyConfigs();
+  const { data: serviceStatus = { is_running: false, active_accounts: 0 }, mutate: mutateStatus } = useAutoReplyStatus();
+  const loading = configsLoading;
+
+  const defaultConfig = configs.find((c) => c.keyword === null);
+  const rules = configs.filter((c) => c.keyword !== null);
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [formData, setFormData] = useState({ keyword: "", response: "", priority: 0 });
   const [defaultReply, setDefaultReply] = useState("抱歉，我现在有点忙，稍后会回复你哦~");
-  const [serviceStatus, setServiceStatus] = useState({ is_running: false, active_accounts: 0 });
   const [searchQuery, setSearchQuery] = useState("");
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const [configs, status] = await Promise.all([
-        api.autoreply.getConfigs(),
-        api.autoreply.getStatus()
-      ]);
-      const defaultConfig = configs.find((c) => c.keyword === null);
-      if (defaultConfig) setDefaultReply(defaultConfig.response);
-      setRules(configs.filter((c) => c.keyword !== null));
-      setServiceStatus(status);
-    } catch (err) {
-      console.error("Failed to fetch autoreply data", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    if (defaultConfig) setDefaultReply(defaultConfig.response);
+  }, [defaultConfig]);
 
   const handleAddRule = async () => {
     try {
       await api.autoreply.createConfig({ ...formData, is_active: true });
       setShowAddModal(false);
       setFormData({ keyword: "", response: "", priority: 0 });
-      fetchData();
+      mutateConfigs();
     } catch { alert("添加失败"); }
   };
 
   const handleDeleteRule = async (id: number) => {
     if (!confirm("确定删除此规则？")) return;
-    try { await api.autoreply.deleteConfig(id); fetchData(); } catch { alert("删除失败"); }
+    try { await api.autoreply.deleteConfig(id); mutateConfigs(); } catch { alert("删除失败"); }
   };
 
   const handleToggleRule = async (rule: AutoReplyConfig) => {
     try {
       await api.autoreply.updateConfig(rule.id, { is_active: !rule.is_active });
-      fetchData();
+      mutateConfigs();
     } catch { alert("操作失败"); }
   };
 
@@ -77,8 +65,7 @@ export default function AutoReplyPage() {
     try {
       if (serviceStatus.is_running) { await api.autoreply.stop(); }
       else { await api.autoreply.start(30); }
-      const status = await api.autoreply.getStatus();
-      setServiceStatus(status);
+      mutateStatus();
     } catch { alert("操作失败"); }
   };
 

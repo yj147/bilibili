@@ -1,41 +1,23 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
 import {
   Calendar, Clock, Play, Pause, RefreshCw, History,
   CheckCircle2, AlertCircle, Plus, Loader2, X, Trash2
 } from "lucide-react";
 import { api } from "@/lib/api";
-import type { ScheduledTask, ReportLog } from "@/lib/types";
+import { useSchedulerTasks, useSchedulerHistory } from "@/lib/swr";
 
 export default function SchedulerPage() {
-  const [tasks, setTasks] = useState<ScheduledTask[]>([]);
-  const [history, setHistory] = useState<ReportLog[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: tasks = [], mutate: mutateTasks, isLoading: tasksLoading } = useSchedulerTasks();
+  const { data: history = [], mutate: mutateHistory } = useSchedulerHistory(20);
+  const loading = tasksLoading;
   const [showAddModal, setShowAddModal] = useState(false);
   const [formData, setFormData] = useState({
     name: "", task_type: "report_batch" as string,
     cron_expression: "", interval_seconds: 300
   });
-
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const [taskRes, histRes] = await Promise.all([
-        api.scheduler.getTasks(),
-        api.scheduler.getHistory(20),
-      ]);
-      setTasks(taskRes);
-      setHistory(histRes);
-    } catch (err) {
-      console.error("Failed to fetch scheduler data", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { fetchData(); }, []);
 
   const handleCreate = async () => {
     try {
@@ -47,14 +29,15 @@ export default function SchedulerPage() {
       await api.scheduler.createTask(body);
       setShowAddModal(false);
       setFormData({ name: "", task_type: "report_batch", cron_expression: "", interval_seconds: 300 });
-      fetchData();
+      mutateTasks();
+      mutateHistory();
     } catch { alert("创建失败"); }
   };
 
   const handleToggle = async (id: number) => {
     try {
       await api.scheduler.toggleTask(id);
-      fetchData();
+      mutateTasks();
     } catch { alert("操作失败"); }
   };
 
@@ -62,7 +45,8 @@ export default function SchedulerPage() {
     if (!confirm("确定删除此任务？")) return;
     try {
       await api.scheduler.deleteTask(id);
-      fetchData();
+      mutateTasks();
+      mutateHistory();
     } catch { alert("删除失败"); }
   };
 
@@ -78,7 +62,7 @@ export default function SchedulerPage() {
           <p className="text-white/40 text-sm mt-1">自动化任务管理，支持 Cron 表达式，让哨兵 7x24 小时待命</p>
         </div>
         <div className="flex gap-3">
-          <button onClick={fetchData} className="glass-card px-4 py-2 rounded-xl text-sm flex items-center gap-2 hover:bg-white/5 transition-colors">
+          <button onClick={() => { mutateTasks(); mutateHistory(); }} className="glass-card px-4 py-2 rounded-xl text-sm flex items-center gap-2 hover:bg-white/5 transition-colors">
             <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> 刷新
           </button>
           <button onClick={() => setShowAddModal(true)}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { 
   Users, 
@@ -15,11 +15,11 @@ import {
   Loader2
 } from "lucide-react";
 import { api } from "@/lib/api";
-import type { Account } from "@/lib/types";
+import { useAccounts } from "@/lib/swr";
 
 export default function AccountsPage() {
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: accounts = [], mutate, isLoading } = useAccounts();
+  const loading = isLoading;
   const [showAddModal, setShowAddModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkingId, setCheckingId] = useState<number | null>(null);
@@ -33,22 +33,6 @@ export default function AccountsPage() {
     group_tag: "default"
   });
 
-  const fetchAccounts = async () => {
-    try {
-      setLoading(true);
-      const data = await api.accounts.list();
-      setAccounts(data);
-    } catch (err) {
-      console.error("Failed to fetch accounts", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchAccounts();
-  }, []);
-
   const handleAddAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -56,7 +40,7 @@ export default function AccountsPage() {
       await api.accounts.create(formData);
       setShowAddModal(false);
       setFormData({ name: "", sessdata: "", bili_jct: "", buvid3: "", group_tag: "default" });
-      fetchAccounts();
+      mutate();
     } catch (err) {
       alert("添加失败，请检查填写内容");
     } finally {
@@ -68,7 +52,7 @@ export default function AccountsPage() {
     setCheckingId(id);
     try {
       await api.accounts.check(id);
-      fetchAccounts();
+      mutate();
     } catch (err) {
       console.error("Check failed", err);
     } finally {
@@ -80,7 +64,7 @@ export default function AccountsPage() {
     if (!confirm("确定要移除此哨兵账号吗？")) return;
     try {
       await api.accounts.delete(id);
-      fetchAccounts();
+      mutate();
     } catch (err) {
       console.error("Delete failed", err);
     }
@@ -99,7 +83,7 @@ export default function AccountsPage() {
         </div>
         <div className="flex gap-3">
           <button 
-            onClick={fetchAccounts}
+            onClick={() => mutate()}
             className="glass-card px-4 py-2 rounded-xl text-sm flex items-center gap-2 hover:bg-white/5 transition-colors"
           >
             <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> 刷新列表
