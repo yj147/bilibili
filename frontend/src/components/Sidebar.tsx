@@ -88,8 +88,8 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
         <div className="glass-card bg-white/5 p-3 rounded-2xl flex items-center gap-3">
           <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-500 to-blue-500" />
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold truncate">ENI Enchanted</p>
-            <p className="text-[10px] text-white/40">Master Admin</p>
+            <p className="text-xs font-semibold truncate">Sentinel Admin</p>
+            <p className="text-[10px] text-white/40">System</p>
           </div>
           <Zap size={14} className="text-yellow-400 animate-pulse" />
         </div>

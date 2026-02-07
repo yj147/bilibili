@@ -85,6 +85,14 @@ export const api = {
     stop: () => request("/autoreply/stop", { method: "POST" }),
   },
 
+  // --- Config ---
+  config: {
+    getAll: () => request<Record<string, any>>('/config/'),
+    get: (key: string) => request<{ key: string; value: any }>(`/config/${key}`),
+    update: (key: string, value: any) => request(`/config/${key}`, { method: 'PUT', body: JSON.stringify({ value }) }),
+    updateBatch: (configs: Record<string, any>) => request('/config/batch', { method: 'POST', body: JSON.stringify(configs) }),
+  },
+
   // --- Scheduler ---
   scheduler: {
     getTasks: () => request<ScheduledTask[]>("/scheduler/tasks"),
