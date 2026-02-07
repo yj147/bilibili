@@ -64,6 +64,23 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
     config_json TEXT
 );
 
+-- System configuration (key-value store)
+CREATE TABLE IF NOT EXISTS system_config (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key TEXT UNIQUE NOT NULL,
+    value TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Default config values
+INSERT OR IGNORE INTO system_config (key, value) VALUES ('min_delay', '2.0');
+INSERT OR IGNORE INTO system_config (key, value) VALUES ('max_delay', '10.0');
+INSERT OR IGNORE INTO system_config (key, value) VALUES ('ua_rotation', 'true');
+INSERT OR IGNORE INTO system_config (key, value) VALUES ('auto_clean_logs', 'true');
+INSERT OR IGNORE INTO system_config (key, value) VALUES ('log_retention_days', '30');
+INSERT OR IGNORE INTO system_config (key, value) VALUES ('webhook_url', '');
+INSERT OR IGNORE INTO system_config (key, value) VALUES ('notify_level', 'error');
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_targets_status ON targets(status);
 CREATE INDEX IF NOT EXISTS idx_targets_type ON targets(type);
