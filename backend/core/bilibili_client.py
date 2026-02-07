@@ -5,6 +5,7 @@ import asyncio
 import time
 from backend.core.wbi_sign import BilibiliSign
 from backend.core.bilibili_auth import BilibiliAuth
+from backend.config import HTTP_TIMEOUT, MAX_RETRIES
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -30,7 +31,7 @@ class BilibiliClient:
             "Sec-Fetch-Mode": "cors",
             "Sec-Fetch-Site": "same-site",
         }
-        self._client = httpx.AsyncClient(cookies=self.cookies, headers=self.headers, timeout=10.0)
+        self._client = httpx.AsyncClient(cookies=self.cookies, headers=self.headers, timeout=HTTP_TIMEOUT)
 
     async def close(self):
         """Close the underlying httpx client."""
@@ -42,8 +43,9 @@ class BilibiliClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()
 
-    async def _request(self, method: str, url: str, params: dict = None, data: dict = None, sign: bool = False, retries: int = 3):
+    async def _request(self, method: str, url: str, params: dict = None, data: dict = None, sign: bool = False, retries: int = None):
         """Internal request helper with rate-limit handling and retries."""
+        if retries is None: retries = MAX_RETRIES
         if params is None: params = {}
         if data is None: data = {}
         
