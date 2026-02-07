@@ -72,6 +72,21 @@ async def health_check():
     return {"status": "healthy"}
 
 
+@app.get("/api/system/info")
+async def system_info():
+    import platform
+    from backend.database import execute_query
+    account_count = await execute_query("SELECT COUNT(*) as c FROM accounts")
+    target_count = await execute_query("SELECT COUNT(*) as c FROM targets")
+    return {
+        "version": "1.0.0",
+        "python": platform.python_version(),
+        "platform": platform.system(),
+        "accounts": account_count[0]["c"],
+        "targets": target_count[0]["c"],
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     from backend.config import HOST, PORT, DEBUG
