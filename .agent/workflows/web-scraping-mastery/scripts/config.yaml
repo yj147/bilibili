@@ -1,0 +1,204 @@
+# config.yaml - Production-Grade Configuration for Unified Scraper v3.0
+
+# 1. Project Information
+project_name: "tech_news_scraper"
+version: "3.0.0"
+
+# 2. Targets & Scope
+# Define one or more targets for the scraper.
+targets:
+  - name: "crawlee_blog"
+    start_urls:
+      - "https://crawlee.dev/blog"
+    allowed_domains:
+      - "crawlee.dev"
+    depth_limit: 2  # 0 for unlimited, >0 for pagination depth
+
+# 3. Crawl Strategy
+crawl_strategy:
+  # Mode: `http` for fast, static content (uses curl-cffi)
+  #       `browser` for dynamic, JS-rendered content (uses Playwright)
+  mode: "http"
+
+  # Concurrency: Number of simultaneous requests (semaphore limit)
+  concurrency: 5
+
+  # Rate limiting: Random delay between requests (in seconds)
+  delay:
+    min: 1.0
+    max: 2.5
+
+  # Request timeout in seconds
+  timeout: 30
+
+  # Maximum retry attempts per URL
+  max_retries: 3
+
+  # Browser-specific options (only used when mode: "browser")
+  headless: true
+
+  # Persistent browser profile directory (keeps login state across runs)
+  # Leave empty for ephemeral sessions
+  # user_data_dir: "./browser_profile"
+
+# 4. Authentication
+# Configure authentication methods for protected content
+auth:
+  # Cookie string format: "key1=val1; key2=val2; key3=val3"
+  # Leave empty if no authentication needed
+  cookies: ""
+
+  # Cookie domain (auto-derived from targets.allowed_domains if not set)
+  # cookie_domain: ".example.com"
+
+  # Example with cookies:
+  # cookies: "session_id=abc123; auth_token=xyz789; user_pref=dark_mode"
+
+# 5. Anti-Detection Measures
+anti_detection:
+  # Rotate user agent automatically (for HTTP mode)
+  rotate_user_agent: true
+
+  # Browser profile to impersonate (for `http` mode with curl-cffi)
+  # Options: chrome110, chrome107, chrome104, safari15_5, etc.
+  impersonate: "chrome110"
+
+  # Path to custom stealth.min.js (optional, built-in fallback used if not set)
+  # stealth_js_path: "libs/stealth.min.js"
+
+  # Proxy configuration
+  proxy:
+    enabled: false
+    # Proxy URL format: "http://user:pass@host:port" or "http://host:port"
+    # Supports HTTP/HTTPS proxies with optional authentication
+    url: ""
+
+    # Example with proxy:
+    # enabled: true
+    # url: "http://proxyuser:proxypass@proxy.example.com:8080"
+
+# 6. Cache Configuration
+# Cache-first deduplication prevents re-scraping already-visited URLs
+cache:
+  enabled: true
+  # Cache file path (JSON format)
+  filepath: "cache/url_cache.json"
+
+# 7. Extraction Rules
+# This section guides your custom parsing logic in the `parse()` method.
+# The scraper uses these rules for pagination detection.
+extraction_rules:
+  listing_page:
+    # CSS selector for individual items on listing pages
+    item_selector: "a.post-card"
+
+    # CSS selector for next page link (used for automatic pagination)
+    # Set to empty string to disable pagination
+    next_page_selector: "a.pagination-nav__link--next"
+
+  detail_page:
+    # CSS selectors for extracting data from detail pages
+    title: "h1.margin-bottom--lg::text"
+    author: "div.avatar__name::text"
+    publish_date: "time::attr(datetime)"
+    content: "div.markdown"
+    tags: "a.tag::text"
+
+# 8. Data Storage
+storage:
+  # Supported types: `jsonl` (default), `json`, `csv`, `sqlite`, `excel`
+  # - jsonl: One JSON object per line (recommended for large datasets)
+  # - json: Single JSON array (good for small datasets)
+  # - csv: Comma-separated values (good for tabular data)
+  # - sqlite: SQLite database with WAL mode (good for 10K+ records, queryable)
+  # - excel: Excel .xlsx file (good for sharing with non-technical users, requires openpyxl)
+  type: "jsonl"
+
+  # Output file path
+  filepath: "output/crawlee_blog.jsonl"
+
+  # Incremental save interval (save every N items to prevent data loss)
+  # Set to 0 to disable incremental saves
+  save_interval: 50
+
+# 9. Logging
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: "INFO"
+
+  # Log file path (optional, logs to console if not specified)
+  filepath: "logs/scraper.log"
+
+# ============================================================================
+# ADVANCED CONFIGURATION EXAMPLES
+# ============================================================================
+
+# Example 1: E-commerce scraper with authentication and proxy
+# targets:
+#   - name: "product_catalog"
+#     start_urls:
+#       - "https://shop.example.com/products"
+#     allowed_domains:
+#       - "shop.example.com"
+#     depth_limit: 3
+#
+# auth:
+#   cookies: "session=abc123; user_id=456; cart_token=xyz789"
+#
+# anti_detection:
+#   proxy:
+#     enabled: true
+#     url: "http://user:pass@proxy.example.com:8080"
+#
+# crawl_strategy:
+#   mode: "browser"
+#   concurrency: 3
+#   delay:
+#     min: 2.0
+#     max: 5.0
+
+# Example 2: News aggregator with high concurrency
+# targets:
+#   - name: "tech_news"
+#     start_urls:
+#       - "https://news.ycombinator.com"
+#       - "https://techcrunch.com"
+#     depth_limit: 1
+#
+# crawl_strategy:
+#   mode: "http"
+#   concurrency: 10
+#   delay:
+#     min: 0.5
+#     max: 1.5
+#
+# cache:
+#   enabled: true
+#   filepath: "cache/news_cache.json"
+#
+# storage:
+#   type: "csv"
+#   filepath: "output/tech_news.csv"
+
+# Example 3: JavaScript-heavy SPA scraping
+# targets:
+#   - name: "spa_content"
+#     start_urls:
+#       - "https://app.example.com/dashboard"
+#     depth_limit: 0
+#
+# crawl_strategy:
+#   mode: "browser"
+#   concurrency: 2
+#   timeout: 60
+#   delay:
+#     min: 3.0
+#     max: 6.0
+#
+# auth:
+#   cookies: "jwt_token=eyJhbGc...; refresh_token=abc123"
+#
+# anti_detection:
+#   proxy:
+#     enabled: true
+#     url: "http://residential-proxy.example.com:8080"
