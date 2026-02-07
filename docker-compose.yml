@@ -1,0 +1,12 @@
+services:
+  sentinel:
+    build: .
+    ports:
+      - "8000:8000"
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - SENTINEL_API_KEY=${SENTINEL_API_KEY:-}
+      - SENTINEL_DEBUG=false
+    restart: unless-stopped
