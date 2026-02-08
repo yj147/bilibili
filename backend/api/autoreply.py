@@ -8,8 +8,6 @@ import asyncio
 from backend.models.task import AutoReplyConfig, AutoReplyConfigCreate, AutoReplyConfigUpdate, AutoReplyStatus
 from backend.database import execute_query, execute_insert
 
-AUTOREPLY_ALLOWED_UPDATE_FIELDS = {"keyword", "response", "priority", "is_active"}
-
 router = APIRouter()
 
 AUTOREPLY_ALLOWED_UPDATE_FIELDS = {"keyword", "response", "priority", "is_active"}
