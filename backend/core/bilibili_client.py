@@ -5,14 +5,8 @@ import asyncio
 import time
 from backend.core.wbi_sign import BilibiliSign
 from backend.core.bilibili_auth import BilibiliAuth
-from backend.config import HTTP_TIMEOUT, MAX_RETRIES
-
-USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0"
-]
+from backend.config import HTTP_TIMEOUT, MAX_RETRIES, USER_AGENTS
+from backend.logger import logger
 
 class BilibiliClient:
     """Consolidated client for Bilibili reporting and interaction with anti-detection."""
@@ -48,7 +42,14 @@ class BilibiliClient:
         if retries is None: retries = MAX_RETRIES
         if params is None: params = {}
         if data is None: data = {}
-        
+
+        account_name = self.auth.accounts[self.account_index]["name"]
+
+        # Auto-refresh WBI keys if stale and signing is needed
+        if sign and BilibiliAuth.wbi_keys_stale():
+            logger.info("[%s] WBI keys stale, refreshing...", account_name)
+            await self.auth.refresh_wbi_keys()
+
         if sign:
             img_key, sub_key = self.auth.get_wbi_keys()
             signer = BilibiliSign(img_key, sub_key)
@@ -64,10 +65,31 @@ class BilibiliClient:
                     resp = await self._client.get(url, params=params)
                 
                 res_json = resp.json()
-                
-                if res_json.get("code") in [-412, 862, 101]:
-                    wait_time = (attempt + 1) * random.uniform(30, 60)
-                    print(f"[{self.auth.accounts[self.account_index]['name']}] Frequency limit hit. Sleeping for {wait_time:.1f}s...")
+                code = res_json.get("code")
+
+                # -412: Too many requests — exponential backoff
+                if code == -412:
+                    wait_time = 5 * (2 ** attempt) + random.uniform(0, 2)
+                    logger.warning("[%s] Rate limited (-412). Backoff %.1fs...", account_name, wait_time)
+                    await asyncio.sleep(wait_time)
+                    continue
+
+                # -352: Risk control — needs longer wait
+                if code == -352:
+                    wait_time = 300 + random.uniform(0, 60)  # 5-6 min
+                    logger.warning("[%s] Risk control (-352). Waiting %.0fs...", account_name, wait_time)
+                    await asyncio.sleep(wait_time)
+                    continue
+
+                # -101: Not logged in — mark and stop retrying
+                if code == -101:
+                    logger.error("[%s] Not logged in (-101). Account may be invalid.", account_name)
+                    return res_json
+
+                # 862/101: Other frequency limits
+                if code in (862, 101):
+                    wait_time = 5 * (2 ** attempt) + random.uniform(0, 2)
+                    logger.warning("[%s] Frequency limit (code %s). Backoff %.1fs...", account_name, code, wait_time)
                     await asyncio.sleep(wait_time)
                     continue
                 
@@ -75,7 +97,7 @@ class BilibiliClient:
             except (httpx.TimeoutException, httpx.ConnectError, httpx.ReadError) as e:
                 last_error = e
                 wait_time = (attempt + 1) * 2
-                print(f"[{self.auth.accounts[self.account_index]['name']}] Network error: {e}. Retrying in {wait_time}s...")
+                logger.warning("[%s] Network error: %s. Retrying in %ds...", account_name, e, wait_time)
                 await asyncio.sleep(wait_time)
         return {"code": -999, "message": f"Max retries reached: {last_error or 'rate limits'}"}
 

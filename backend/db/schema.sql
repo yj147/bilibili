@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     sessdata TEXT NOT NULL,
     bili_jct TEXT NOT NULL,
     buvid3 TEXT,
+    buvid4 TEXT,
     group_tag TEXT DEFAULT 'default',
     is_active BOOLEAN DEFAULT 1,
     last_check_at DATETIME,

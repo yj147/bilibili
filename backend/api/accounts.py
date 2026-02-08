@@ -13,7 +13,8 @@ async def list_accounts():
 @router.post("/", response_model=Account)
 async def create_account(account: AccountCreate):
     return await account_service.create_account(
-        account.name, account.sessdata, account.bili_jct, account.buvid3 or "", account.group_tag or "default")
+        account.name, account.sessdata, account.bili_jct,
+        account.buvid3 or "", account.buvid4 or "", account.group_tag or "default")
 
 @router.get("/{account_id}", response_model=Account)
 async def get_account(account_id: int):

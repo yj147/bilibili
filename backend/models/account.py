@@ -11,6 +11,7 @@ class AccountBase(BaseModel):
     sessdata: str
     bili_jct: str
     buvid3: Optional[str] = ""
+    buvid4: Optional[str] = ""
     group_tag: Optional[str] = "default"
 
 
@@ -23,6 +24,7 @@ class AccountUpdate(BaseModel):
     sessdata: Optional[str] = None
     bili_jct: Optional[str] = None
     buvid3: Optional[str] = None
+    buvid4: Optional[str] = None
     group_tag: Optional[str] = None
     is_active: Optional[bool] = None
 

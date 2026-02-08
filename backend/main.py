@@ -22,6 +22,20 @@ async def lifespan(app: FastAPI):
         logger.warning("Bili-Sentinel 必须以单 worker 模式运行 (--workers 1)")
     await init_db()
     logger.info("Database initialized")
+    # Refresh WBI keys on startup using the first active account
+    from backend.core.bilibili_auth import BilibiliAuth
+    from backend.database import execute_query
+    startup_accounts = await execute_query(
+        "SELECT * FROM accounts WHERE is_active = 1 LIMIT 1"
+    )
+    if startup_accounts:
+        _auth = BilibiliAuth.from_db_account(startup_accounts[0])
+        if await _auth.refresh_wbi_keys():
+            logger.info("WBI keys refreshed on startup")
+        else:
+            logger.warning("WBI keys refresh failed on startup")
+    else:
+        logger.warning("No active accounts for WBI key refresh")
     from backend.services.scheduler_service import start_scheduler, stop_scheduler
     await start_scheduler()
     logger.info("Scheduler started")

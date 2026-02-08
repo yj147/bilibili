@@ -2,7 +2,7 @@
 from backend.database import execute_query, execute_insert
 from backend.logger import logger
 
-ALLOWED_UPDATE_FIELDS = {"name", "sessdata", "bili_jct", "buvid3", "group_tag", "is_active"}
+ALLOWED_UPDATE_FIELDS = {"name", "sessdata", "bili_jct", "buvid3", "buvid4", "group_tag", "is_active"}
 
 
 async def list_accounts():
@@ -14,10 +14,10 @@ async def get_account(account_id: int):
     return rows[0] if rows else None
 
 
-async def create_account(name, sessdata, bili_jct, buvid3="", group_tag="default"):
+async def create_account(name, sessdata, bili_jct, buvid3="", buvid4="", group_tag="default"):
     account_id = await execute_insert(
-        "INSERT INTO accounts (name, sessdata, bili_jct, buvid3, group_tag) VALUES (?, ?, ?, ?, ?)",
-        (name, sessdata, bili_jct, buvid3, group_tag)
+        "INSERT INTO accounts (name, sessdata, bili_jct, buvid3, buvid4, group_tag) VALUES (?, ?, ?, ?, ?, ?)",
+        (name, sessdata, bili_jct, buvid3, buvid4, group_tag)
     )
     rows = await execute_query("SELECT * FROM accounts WHERE id = ?", (account_id,))
     return rows[0]
@@ -55,7 +55,13 @@ async def check_account_validity(account_id: int):
     if not rows:
         return None
     account = rows[0]
-    cookies = {"SESSDATA": account["sessdata"], "bili_jct": account["bili_jct"], "buvid3": account["buvid3"] or ""}
+    cookies = {
+        "SESSDATA": account["sessdata"],
+        "bili_jct": account["bili_jct"],
+        "buvid3": account["buvid3"] or "",
+    }
+    if account.get("buvid4"):
+        cookies["buvid4"] = account["buvid4"]
     async with httpx.AsyncClient(cookies=cookies) as client:
         resp = await client.get("https://api.bilibili.com/x/web-interface/nav",
             headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0"})

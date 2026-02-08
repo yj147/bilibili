@@ -13,6 +13,8 @@ import json
 import sys
 import os
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from unittest.mock import AsyncMock, patch, MagicMock
@@ -77,6 +79,7 @@ results = TestResults()
 
 # ===== Test 1: CSRF Token 重复设置 =====
 
+@pytest.mark.asyncio
 async def test_csrf_double_set():
     """report_user 手动设了 csrf，_request 又设一次。验证不会冲突。"""
     auth = make_mock_auth()
@@ -111,6 +114,7 @@ async def test_csrf_double_set():
 
 # ===== Test 2: Comment Identifier 解析 =====
 
+@pytest.mark.asyncio
 async def test_comment_identifier_parsing():
     """测试 comment identifier 各种格式的解析。"""
     auth = make_mock_auth()
@@ -165,6 +169,7 @@ async def test_comment_identifier_parsing():
 
 # ===== Test 3: Video Report 缺少 BV→AID 转换 =====
 
+@pytest.mark.asyncio
 async def test_video_report_aid_missing():
     """测试 video report 在 aid=None 时，修复后会自动调 get_video_info 获取 aid。"""
     auth = make_mock_auth()
@@ -186,6 +191,7 @@ async def test_video_report_aid_missing():
 
 # ===== Test 4: 频控重试逻辑 =====
 
+@pytest.mark.asyncio
 async def test_rate_limit_retry():
     """测试 -412 频控时的重试行为。"""
     auth = make_mock_auth()
@@ -223,6 +229,7 @@ async def test_rate_limit_retry():
 
 # ===== Test 5: 网络超时重试 =====
 
+@pytest.mark.asyncio
 async def test_network_timeout_retry():
     """测试网络超时时的重试行为。"""
     import httpx
@@ -255,6 +262,7 @@ async def test_network_timeout_retry():
 
 # ===== Test 6: Max Retries 耗尽 =====
 
+@pytest.mark.asyncio
 async def test_max_retries_exhausted():
     """测试重试耗尽时的返回值。"""
     import httpx
@@ -280,6 +288,7 @@ async def test_max_retries_exhausted():
 
 # ===== Test 7: async with 上下文管理器 =====
 
+@pytest.mark.asyncio
 async def test_context_manager():
     """测试 BilibiliClient 上下文管理器正确关闭连接。"""
     auth = make_mock_auth()
@@ -298,6 +307,7 @@ async def test_context_manager():
 
 # ===== Test 8: 并发报告不共享 client state =====
 
+@pytest.mark.asyncio
 async def test_concurrent_reports_isolation():
     """测试多个账号并发执行时 client 是否独立。"""
     auth1 = make_mock_auth("account_1")
@@ -318,6 +328,7 @@ async def test_concurrent_reports_isolation():
 
 # ===== Test 9: report_user reason 字段语义 =====
 
+@pytest.mark.asyncio
 async def test_report_user_field_semantics():
     """report_user 的 data['reason'] 应该是 reason_id（整数），data['content'] 是文字原因。"""
     auth = make_mock_auth()
@@ -342,6 +353,7 @@ async def test_report_user_field_semantics():
 
 # ===== Test 10: _execute_single_report 集成测试 =====
 
+@pytest.mark.asyncio
 async def test_execute_single_report_integration():
     """测试完整的 report 执行流程（mock Bilibili API）。"""
     os.environ['SENTINEL_DB_PATH'] = ':memory:'
