@@ -4,6 +4,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
+
 @pytest.fixture(autouse=True)
 def reset_db_state(monkeypatch, tmp_path):
     """Reset database module state between tests."""

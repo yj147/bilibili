@@ -12,6 +12,8 @@ AUTOREPLY_ALLOWED_UPDATE_FIELDS = {"keyword", "response", "priority", "is_active
 
 router = APIRouter()
 
+AUTOREPLY_ALLOWED_UPDATE_FIELDS = {"keyword", "response", "priority", "is_active"}
+
 # Global service state
 _autoreply_running = False
 _autoreply_task = None
