@@ -14,6 +14,7 @@ import type {
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "/api";
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY || '';
 
 async function request<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE}${path}`;
@@ -21,6 +22,7 @@ async function request<T = unknown>(path: string, options: RequestInit = {}): Pr
     ...options,
     headers: {
       "Content-Type": "application/json",
+      ...(API_KEY ? { 'X-API-Key': API_KEY } : {}),
       ...options.headers,
     },
   });

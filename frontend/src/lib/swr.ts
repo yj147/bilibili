@@ -2,8 +2,11 @@ import useSWR from 'swr';
 import type { Account, TargetListResponse, ReportLog, AutoReplyConfig, AutoReplyStatus, ScheduledTask } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || '/api';
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY || '';
 
-const fetcher = (path: string) => fetch(`${API_BASE}${path}`).then(r => {
+const fetcher = (path: string) => fetch(`${API_BASE}${path}`, {
+  headers: API_KEY ? { 'X-API-Key': API_KEY } : {},
+}).then(r => {
   if (!r.ok) throw new Error(`${r.status}`);
   return r.json();
 });
