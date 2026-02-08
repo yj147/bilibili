@@ -51,7 +51,7 @@ export default function ConfigPage() {
   const [formState, setFormState] = useState({
     min_delay: "2",
     max_delay: "10",
-    ua_rotate: true,
+    ua_rotation: true,
     webhook_url: "",
     notify_level: "error",
     auto_clean_logs: true,
@@ -62,7 +62,7 @@ export default function ConfigPage() {
       setFormState(prev => ({
         min_delay: configs.min_delay?.toString() ?? prev.min_delay,
         max_delay: configs.max_delay?.toString() ?? prev.max_delay,
-        ua_rotate: configs.ua_rotate ?? prev.ua_rotate,
+        ua_rotation: configs.ua_rotation ?? prev.ua_rotate,
         webhook_url: configs.webhook_url ?? prev.webhook_url,
         notify_level: configs.notify_level ?? prev.notify_level,
         auto_clean_logs: configs.auto_clean_logs ?? prev.auto_clean_logs,
@@ -76,7 +76,7 @@ export default function ConfigPage() {
       await api.config.updateBatch({
         min_delay: parseInt(formState.min_delay) || 2,
         max_delay: parseInt(formState.max_delay) || 10,
-        ua_rotate: formState.ua_rotate,
+        ua_rotation: formState.ua_rotation,
         webhook_url: formState.webhook_url,
         notify_level: formState.notify_level,
         auto_clean_logs: formState.auto_clean_logs,
@@ -140,9 +140,9 @@ export default function ConfigPage() {
             label="UA 自动轮换" 
             description="每次请求随机选择不同的 User-Agent，模拟不同设备环境。"
           >
-            <button onClick={() => setFormState({...formState, ua_rotate: !formState.ua_rotate})}
-              className={`w-12 h-6 rounded-full relative p-1 cursor-pointer transition-colors ${formState.ua_rotate ? 'bg-blue-600' : 'bg-zinc-600'}`}>
-              <div className={`absolute w-4 h-4 bg-white rounded-full shadow-sm transition-all ${formState.ua_rotate ? 'right-1' : 'left-1'}`} />
+            <button onClick={() => setFormState({...formState, ua_rotation: !formState.ua_rotation})}
+              className={`w-12 h-6 rounded-full relative p-1 cursor-pointer transition-colors ${formState.ua_rotation ? 'bg-blue-600' : 'bg-zinc-600'}`}>
+              <div className={`absolute w-4 h-4 bg-white rounded-full shadow-sm transition-all ${formState.ua_rotation ? 'right-1' : 'left-1'}`} />
             </button>
           </ConfigItem>
         </ConfigSection>
