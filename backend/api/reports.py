@@ -27,15 +27,27 @@ async def _execute_single_report(target: dict, account: dict) -> ReportResult:
         async with BilibiliClient(auth, account_index=0) as client:
             # Execute based on target type
             if target["type"] == "video":
+                aid = target.get("aid") or 0
+                # BV号时自动获取aid
+                if not aid and target.get("identifier", "").startswith("BV"):
+                    info = await client.get_video_info(target["identifier"])
+                    if info.get("code") == 0:
+                        aid = info["data"]["aid"]
                 result = await client.report_video(
-                    aid=target.get("aid") or 0,
+                    aid=aid,
                     reason=target.get("reason_id") or 1,
                     content=target.get("reason_text") or ""
                 )
             elif target["type"] == "comment":
+                if ":" in target["identifier"]:
+                    oid = int(target["identifier"].split(":")[0])
+                    rpid = int(target["identifier"].split(":")[-1])
+                else:
+                    oid = target.get("aid") or 0
+                    rpid = int(target["identifier"])
                 result = await client.report_comment(
-                    oid=int(target["identifier"].split(":")[0]) if ":" in target["identifier"] else 0,
-                    rpid=int(target["identifier"].split(":")[-1]) if ":" in target["identifier"] else int(target["identifier"]),
+                    oid=oid,
+                    rpid=rpid,
                     reason=target.get("reason_id") or 1,
                     content=target.get("reason_text") or ""
                 )
