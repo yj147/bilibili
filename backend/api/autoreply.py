@@ -79,14 +79,13 @@ async def get_autoreply_status():
 
 
 @router.post("/start")
-async def start_autoreply_service(interval: int = 30):
-    """Start the auto-reply polling service."""
+async def start_autoreply_service(interval: int = 30, dedup: bool = False):
+    """Start the auto-reply polling service. dedup=false: repeat mode (flood), dedup=true: single-reply mode."""
     global _autoreply_running, _autoreply_task
     
     if _autoreply_running:
         return {"message": "Auto-reply service is already running"}
     
-    # Start background task
     _autoreply_running = True
     
     async def poll_loop():
@@ -117,13 +116,14 @@ async def start_autoreply_service(interval: int = 30):
                                     if str(talker_id) == str(own_uid):
                                         continue
                                     
-                                    # Dedup: skip if we already replied to this message
-                                    state_rows = await execute_query(
-                                        "SELECT last_msg_ts FROM autoreply_state WHERE account_id = ? AND talker_id = ?",
-                                        (account["id"], talker_id))
-                                    last_replied_ts = state_rows[0]["last_msg_ts"] if state_rows else 0
-                                    if msg_ts <= last_replied_ts:
-                                        continue
+                                    # Dedup mode: skip if already replied to this message
+                                    if dedup:
+                                        state_rows = await execute_query(
+                                            "SELECT last_msg_ts FROM autoreply_state WHERE account_id = ? AND talker_id = ?",
+                                            (account["id"], talker_id))
+                                        last_replied_ts = state_rows[0]["last_msg_ts"] if state_rows else 0
+                                        if msg_ts <= last_replied_ts:
+                                            continue
                                     
                                     msg_content = str(last_msg.get("content", ""))
                                     reply_text = default_reply
@@ -135,11 +135,12 @@ async def start_autoreply_service(interval: int = 30):
                                     print(f"[AutoReply][{account['name']}] Replying to {talker_id}: {reply_text}")
                                     await client.send_private_message(talker_id, reply_text)
                                     
-                                    # Update dedup state
-                                    await execute_query(
-                                        "INSERT INTO autoreply_state (account_id, talker_id, last_msg_ts) VALUES (?, ?, ?) "
-                                        "ON CONFLICT(account_id, talker_id) DO UPDATE SET last_msg_ts = excluded.last_msg_ts",
-                                        (account["id"], talker_id, msg_ts))
+                                    # Track state for dedup
+                                    if dedup:
+                                        await execute_query(
+                                            "INSERT INTO autoreply_state (account_id, talker_id, last_msg_ts) VALUES (?, ?, ?) "
+                                            "ON CONFLICT(account_id, talker_id) DO UPDATE SET last_msg_ts = excluded.last_msg_ts",
+                                            (account["id"], talker_id, msg_ts))
                         except Exception as acc_err:
                             print(f"[AutoReply][{account['name']}] Error: {acc_err}")
                     
@@ -149,7 +150,7 @@ async def start_autoreply_service(interval: int = 30):
             await asyncio.sleep(interval)
     
     _autoreply_task = asyncio.create_task(poll_loop())
-    return {"message": "Auto-reply service started", "interval": interval}
+    return {"message": "Auto-reply service started", "interval": interval, "dedup": dedup}
 
 
 @router.post("/stop")

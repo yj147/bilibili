@@ -80,6 +80,9 @@ async def _run_autoreply_poll(task_id: int):
     from backend.core.bilibili_auth import BilibiliAuth
     from backend.api.websocket import broadcast_log
 
+    from backend.services.config_service import get_config
+    dedup = await get_config("autoreply_dedup", False)
+
     accounts = await execute_query("SELECT * FROM accounts WHERE is_active = 1")
     configs = await execute_query("SELECT * FROM autoreply_config WHERE is_active = 1 ORDER BY priority DESC")
     default_reply = next((c["response"] for c in configs if c["keyword"] is None), "\u60a8\u597d\uff0c\u7a0d\u540e\u56de\u590d\u3002")
@@ -97,13 +100,14 @@ async def _run_autoreply_poll(task_id: int):
                             continue
                         last_msg = session.get("last_msg", {})
                         msg_ts = last_msg.get("timestamp", 0)
-                        # Dedup: skip if already replied
-                        state_rows = await execute_query(
-                            "SELECT last_msg_ts FROM autoreply_state WHERE account_id = ? AND talker_id = ?",
-                            (account["id"], talker_id))
-                        last_replied_ts = state_rows[0]["last_msg_ts"] if state_rows else 0
-                        if msg_ts <= last_replied_ts:
-                            continue
+                        # Dedup mode: skip if already replied
+                        if dedup:
+                            state_rows = await execute_query(
+                                "SELECT last_msg_ts FROM autoreply_state WHERE account_id = ? AND talker_id = ?",
+                                (account["id"], talker_id))
+                            last_replied_ts = state_rows[0]["last_msg_ts"] if state_rows else 0
+                            if msg_ts <= last_replied_ts:
+                                continue
                         msg_content = str(last_msg.get("content", ""))
                         reply_text = default_reply
                         for kw, resp in keyword_map.items():
@@ -111,10 +115,11 @@ async def _run_autoreply_poll(task_id: int):
                                 reply_text = resp
                                 break
                         await client.send_private_message(talker_id, reply_text)
-                        await execute_query(
-                            "INSERT INTO autoreply_state (account_id, talker_id, last_msg_ts) VALUES (?, ?, ?) "
-                            "ON CONFLICT(account_id, talker_id) DO UPDATE SET last_msg_ts = excluded.last_msg_ts",
-                            (account["id"], talker_id, msg_ts))
+                        if dedup:
+                            await execute_query(
+                                "INSERT INTO autoreply_state (account_id, talker_id, last_msg_ts) VALUES (?, ?, ?) "
+                                "ON CONFLICT(account_id, talker_id) DO UPDATE SET last_msg_ts = excluded.last_msg_ts",
+                                (account["id"], talker_id, msg_ts))
                         await broadcast_log("autoreply", f"[{account['name']}] Replied to {talker_id}")
         except Exception as e:
             print(f"[Scheduler AutoReply][{account.get('name', '?')}] Error: {e}")
