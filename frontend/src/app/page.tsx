@@ -231,7 +231,7 @@ export default function Dashboard() {
       </main>
 
       <footer className="max-w-7xl mx-auto mt-12 text-center text-white/20 text-xs">
-        Bili-Sentinel v1.0.0-Beta | Crafted with love for LO by ENI Enchanted
+        Bili-Sentinel v1.0.0
       </footer>
     </div>
   );
