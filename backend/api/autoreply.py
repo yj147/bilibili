@@ -102,31 +102,30 @@ async def start_autoreply_service(interval: int = 30):
                 for account in accounts:
                     auth = BilibiliAuth.from_db_account(account)
                     
-                    client = BilibiliClient(auth, account_index=0)
-                    
-                    try:
-                        sessions = await client.get_recent_sessions()
-                        if sessions.get("code") == 0:
-                            for session in sessions.get("data", {}).get("session_list", []) or []:
-                                last_msg = session.get("last_msg", {})
-                                msg_ts = last_msg.get("timestamp", 0)
-                                
-                                talker_id = session.get("talker_id")
-                                own_uid = account.get("uid", 0)
-                                if str(talker_id) == str(own_uid):
-                                    continue
-                                
-                                msg_content = str(last_msg.get("content", ""))
-                                reply_text = default_reply
-                                for kw, resp in keyword_map.items():
-                                    if kw in msg_content:
-                                        reply_text = resp
-                                        break
-                                
-                                print(f"[AutoReply][{account['name']}] Replying to {talker_id}: {reply_text}")
-                                await client.send_private_message(talker_id, reply_text)
-                    except Exception as acc_err:
-                        print(f"[AutoReply][{account['name']}] Error: {acc_err}")
+                    async with BilibiliClient(auth, account_index=0) as client:
+                        try:
+                            sessions = await client.get_recent_sessions()
+                            if sessions.get("code") == 0:
+                                for session in sessions.get("data", {}).get("session_list", []) or []:
+                                    last_msg = session.get("last_msg", {})
+                                    msg_ts = last_msg.get("timestamp", 0)
+                                    
+                                    talker_id = session.get("talker_id")
+                                    own_uid = account.get("uid", 0)
+                                    if str(talker_id) == str(own_uid):
+                                        continue
+                                    
+                                    msg_content = str(last_msg.get("content", ""))
+                                    reply_text = default_reply
+                                    for kw, resp in keyword_map.items():
+                                        if kw in msg_content:
+                                            reply_text = resp
+                                            break
+                                    
+                                    print(f"[AutoReply][{account['name']}] Replying to {talker_id}: {reply_text}")
+                                    await client.send_private_message(talker_id, reply_text)
+                        except Exception as acc_err:
+                            print(f"[AutoReply][{account['name']}] Error: {acc_err}")
                     
             except Exception as e:
                 print(f"Auto-reply error: {e}")

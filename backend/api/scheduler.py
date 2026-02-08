@@ -88,21 +88,21 @@ async def _run_autoreply_poll(task_id: int):
     for account in accounts:
         try:
             auth = BilibiliAuth.from_db_account(account)
-            client = BilibiliClient(auth, account_index=0)
-            sessions = await client.get_recent_sessions()
-            if sessions.get("code") == 0:
-                for session in sessions.get("data", {}).get("session_list", []) or []:
-                    talker_id = session.get("talker_id")
-                    if str(talker_id) == str(account.get("uid", 0)):
-                        continue
-                    msg_content = str(session.get("last_msg", {}).get("content", ""))
-                    reply_text = default_reply
-                    for kw, resp in keyword_map.items():
-                        if kw in msg_content:
-                            reply_text = resp
-                            break
-                    await client.send_private_message(talker_id, reply_text)
-                    await broadcast_log("autoreply", f"[{account['name']}] Replied to {talker_id}")
+            async with BilibiliClient(auth, account_index=0) as client:
+                sessions = await client.get_recent_sessions()
+                if sessions.get("code") == 0:
+                    for session in sessions.get("data", {}).get("session_list", []) or []:
+                        talker_id = session.get("talker_id")
+                        if str(talker_id) == str(account.get("uid", 0)):
+                            continue
+                        msg_content = str(session.get("last_msg", {}).get("content", ""))
+                        reply_text = default_reply
+                        for kw, resp in keyword_map.items():
+                            if kw in msg_content:
+                                reply_text = resp
+                                break
+                        await client.send_private_message(talker_id, reply_text)
+                        await broadcast_log("autoreply", f"[{account['name']}] Replied to {talker_id}")
         except Exception as e:
             print(f"[Scheduler AutoReply][{account.get('name', '?')}] Error: {e}")
     await execute_query("UPDATE scheduled_tasks SET last_run_at = datetime('now') WHERE id = ?", (task_id,))

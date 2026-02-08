@@ -24,63 +24,62 @@ async def _execute_single_report(target: dict, account: dict) -> ReportResult:
         # Create auth object from DB account
         auth = BilibiliAuth.from_db_account(account)
         
-        client = BilibiliClient(auth, account_index=0)
-        
-        # Execute based on target type
-        if target["type"] == "video":
-            result = await client.report_video(
-                aid=target.get("aid") or 0,
-                reason=target.get("reason_id") or 1,
-                content=target.get("reason_text") or ""
+        async with BilibiliClient(auth, account_index=0) as client:
+            # Execute based on target type
+            if target["type"] == "video":
+                result = await client.report_video(
+                    aid=target.get("aid") or 0,
+                    reason=target.get("reason_id") or 1,
+                    content=target.get("reason_text") or ""
+                )
+            elif target["type"] == "comment":
+                result = await client.report_comment(
+                    oid=int(target["identifier"].split(":")[0]) if ":" in target["identifier"] else 0,
+                    rpid=int(target["identifier"].split(":")[-1]) if ":" in target["identifier"] else int(target["identifier"]),
+                    reason=target.get("reason_id") or 1,
+                    content=target.get("reason_text") or ""
+                )
+            elif target["type"] == "user":
+                result = await client.report_user(
+                    mid=int(target["identifier"]),
+                    reason=target.get("reason_text") or "违规内容",
+                    reason_id=target.get("reason_id") or 1
+                )
+            else:
+                result = {"code": -1, "message": "Unknown target type"}
+            
+            success = result.get("code") == 0
+            
+            # Log to database
+            await execute_insert(
+                """INSERT INTO report_logs (target_id, account_id, action, request_data, response_data, success, error_message)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    target["id"],
+                    account["id"],
+                    f"report_{target['type']}",
+                    json.dumps({"identifier": target["identifier"], "reason_id": target.get("reason_id")}),
+                    json.dumps(result),
+                    success,
+                    None if success else result.get("message", "Unknown error")
+                )
             )
-        elif target["type"] == "comment":
-            result = await client.report_comment(
-                oid=int(target["identifier"].split(":")[0]) if ":" in target["identifier"] else 0,
-                rpid=int(target["identifier"].split(":")[-1]) if ":" in target["identifier"] else int(target["identifier"]),
-                reason=target.get("reason_id") or 1,
-                content=target.get("reason_text") or ""
+            
+            # Broadcast log via WebSocket
+            await broadcast_log(
+                "report",
+                f"[{account['name']}] report_{target['type']} {target['identifier']} -> {'OK' if success else 'FAIL'}",
+                {"target_id": target["id"], "account_id": account["id"], "success": success}
             )
-        elif target["type"] == "user":
-            result = await client.report_user(
-                mid=int(target["identifier"]),
-                reason=target.get("reason_text") or "违规内容",
-                reason_id=target.get("reason_id") or 1
+            
+            return ReportResult(
+                target_id=target["id"],
+                account_id=account["id"],
+                account_name=account["name"],
+                success=success,
+                message=result.get("message", "OK" if success else "Failed"),
+                response=result
             )
-        else:
-            result = {"code": -1, "message": "Unknown target type"}
-        
-        success = result.get("code") == 0
-        
-        # Log to database
-        await execute_insert(
-            """INSERT INTO report_logs (target_id, account_id, action, request_data, response_data, success, error_message)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (
-                target["id"],
-                account["id"],
-                f"report_{target['type']}",
-                json.dumps({"identifier": target["identifier"], "reason_id": target.get("reason_id")}),
-                json.dumps(result),
-                success,
-                None if success else result.get("message", "Unknown error")
-            )
-        )
-        
-        # Broadcast log via WebSocket
-        await broadcast_log(
-            "report",
-            f"[{account['name']}] report_{target['type']} {target['identifier']} -> {'OK' if success else 'FAIL'}",
-            {"target_id": target["id"], "account_id": account["id"], "success": success}
-        )
-        
-        return ReportResult(
-            target_id=target["id"],
-            account_id=account["id"],
-            account_name=account["name"],
-            success=success,
-            message=result.get("message", "OK" if success else "Failed"),
-            response=result
-        )
         
     except Exception as e:
         await execute_insert(
