@@ -6,6 +6,7 @@ from typing import List
 import asyncio
 import json
 import os
+import time
 
 router = APIRouter()
 
@@ -19,7 +20,7 @@ async def broadcast_log(log_type: str, message: str, data: dict = None):
         "type": log_type,
         "message": message,
         "data": data or {},
-        "timestamp": asyncio.get_event_loop().time()
+        "timestamp": time.time()
     })
     
     disconnected = []

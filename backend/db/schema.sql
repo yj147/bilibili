@@ -81,6 +81,15 @@ INSERT OR IGNORE INTO system_config (key, value) VALUES ('log_retention_days', '
 INSERT OR IGNORE INTO system_config (key, value) VALUES ('webhook_url', '');
 INSERT OR IGNORE INTO system_config (key, value) VALUES ('notify_level', 'error');
 
+-- Auto-reply state (dedup tracking)
+CREATE TABLE IF NOT EXISTS autoreply_state (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER NOT NULL,
+    talker_id INTEGER NOT NULL,
+    last_msg_ts INTEGER DEFAULT 0,
+    UNIQUE(account_id, talker_id)
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_targets_status ON targets(status);
 CREATE INDEX IF NOT EXISTS idx_targets_type ON targets(type);
