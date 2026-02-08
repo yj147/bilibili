@@ -52,7 +52,6 @@ export default function ConfigPage() {
     min_delay: "2",
     max_delay: "10",
     ua_rotation: true,
-    autoreply_dedup: false,
     webhook_url: "",
     notify_level: "error",
     auto_clean_logs: true,
@@ -64,7 +63,6 @@ export default function ConfigPage() {
         min_delay: configs.min_delay?.toString() ?? prev.min_delay,
         max_delay: configs.max_delay?.toString() ?? prev.max_delay,
         ua_rotation: configs.ua_rotation ?? prev.ua_rotation,
-        autoreply_dedup: configs.autoreply_dedup ?? prev.autoreply_dedup,
         webhook_url: configs.webhook_url ?? prev.webhook_url,
         notify_level: configs.notify_level ?? prev.notify_level,
         auto_clean_logs: configs.auto_clean_logs ?? prev.auto_clean_logs,
@@ -79,7 +77,6 @@ export default function ConfigPage() {
         min_delay: parseInt(formState.min_delay) || 2,
         max_delay: parseInt(formState.max_delay) || 10,
         ua_rotation: formState.ua_rotation,
-        autoreply_dedup: formState.autoreply_dedup,
         webhook_url: formState.webhook_url,
         notify_level: formState.notify_level,
         auto_clean_logs: formState.auto_clean_logs,
@@ -146,15 +143,6 @@ export default function ConfigPage() {
             <button onClick={() => setFormState({...formState, ua_rotation: !formState.ua_rotation})}
               className={`w-12 h-6 rounded-full relative p-1 cursor-pointer transition-colors ${formState.ua_rotation ? 'bg-blue-600' : 'bg-zinc-600'}`}>
               <div className={`absolute w-4 h-4 bg-white rounded-full shadow-sm transition-all ${formState.ua_rotation ? 'right-1' : 'left-1'}`} />
-            </button>
-          </ConfigItem>
-          <ConfigItem 
-            label="自动回复去重" 
-            description="开启后每条消息只回复一次（单次模式）。关闭则持续回复所有会话（压测/洪水模式）。"
-          >
-            <button onClick={() => setFormState({...formState, autoreply_dedup: !formState.autoreply_dedup})}
-              className={`w-12 h-6 rounded-full relative p-1 cursor-pointer transition-colors ${formState.autoreply_dedup ? 'bg-blue-600' : 'bg-zinc-600'}`}>
-              <div className={`absolute w-4 h-4 bg-white rounded-full shadow-sm transition-all ${formState.autoreply_dedup ? 'right-1' : 'left-1'}`} />
             </button>
           </ConfigItem>
         </ConfigSection>
