@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from unittest.mock import AsyncMock, patch, MagicMock
 from backend.core.bilibili_client import BilibiliClient
 from backend.core.bilibili_auth import BilibiliAuth
-from backend.api.reports import _execute_single_report
+from backend.services.report_service import execute_single_report as _execute_single_report
 from backend.database import init_db, execute_query, execute_insert, close_db
 
 # ===== Test Utilities =====

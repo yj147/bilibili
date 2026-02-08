@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
         logger.warning("Bili-Sentinel 必须以单 worker 模式运行 (--workers 1)")
     await init_db()
     logger.info("Database initialized")
-    from backend.api.scheduler import start_scheduler, stop_scheduler
+    from backend.services.scheduler_service import start_scheduler, stop_scheduler
     await start_scheduler()
     logger.info("Scheduler started")
     yield
