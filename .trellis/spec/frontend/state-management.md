@@ -1,51 +1,71 @@
 # State Management
 
-> How state is managed in this project.
+> How state is managed in Bili-Sentinel frontend.
 
 ---
 
 ## Overview
 
-<!--
-Document your project's state management conventions here.
+No global state library (no Redux/Zustand). State at three levels:
 
-Questions to answer:
-- What state management solution do you use?
-- How is local vs global state decided?
-- How do you handle server state?
-- What are the patterns for derived state?
--->
-
-(To be filled by the team)
+1. **Server state**: SWR (cache + revalidation)
+2. **Component state**: React `useState`
+3. **Real-time state**: WebSocket hook
 
 ---
 
-## State Categories
+## Server State (SWR)
 
-<!-- Local state, global state, server state, URL state -->
+All backend data managed by SWR hooks in `lib/swr.ts`:
+- Automatic caching and revalidation
+- Loading and error states
+- Focus-based refresh, interval polling for critical data
 
-(To be filled by the team)
+```typescript
+const { data, error, isLoading, mutate } = useAccounts();
+```
 
----
-
-## When to Use Global State
-
-<!-- Criteria for promoting state to global -->
-
-(To be filled by the team)
-
----
-
-## Server State
-
-<!-- How server data is cached and synchronized -->
-
-(To be filled by the team)
+After mutations, call `mutate()` to trigger revalidation.
 
 ---
 
-## Common Mistakes
+## Component State (useState)
 
-<!-- State management mistakes your team has made -->
+Local UI state managed directly in components:
 
-(To be filled by the team)
+| State | Purpose |
+|-------|--------|
+| `loading` | Button loading during mutations |
+| `isDialogOpen` | Modal visibility |
+| `selectedItem` | Currently selected item |
+| `formData` | Form input values |
+| `mobileOpen` | Mobile sidebar toggle |
+
+---
+
+## Real-Time State (WebSocket)
+
+```typescript
+const { logs, connected } = useLogStream(50);
+```
+
+- Sliding window of recent log entries
+- Auto-reconnects on disconnection
+- Dashboard merges WS + API logs with dedup
+
+---
+
+## What NOT to Do
+
+1. **Don't add a global store** — SWR + useState is sufficient
+2. **Don't duplicate server data in useState** — use SWR directly
+3. **Don't forget default values** — SWR data is `undefined` on first render
+
+```typescript
+// Good
+const { data: accounts = [] } = useAccounts();
+
+// Bad — may crash
+const { data: accounts } = useAccounts();
+accounts.map(...);
+```

@@ -1,51 +1,68 @@
 # Quality Guidelines
 
-> Code quality standards for frontend development.
+> Code quality standards for Bili-Sentinel frontend.
 
 ---
 
-## Overview
+## Tech Stack
 
-<!--
-Document your project's quality standards here.
-
-Questions to answer:
-- What patterns are forbidden?
-- What linting rules do you enforce?
-- What are your testing requirements?
-- What code review standards apply?
--->
-
-(To be filled by the team)
-
----
-
-## Forbidden Patterns
-
-<!-- Patterns that should never be used and why -->
-
-(To be filled by the team)
+| Technology | Version | Purpose |
+|-----------|---------|--------|
+| Next.js | 16 | App framework (App Router) |
+| React | 19 | UI library |
+| TypeScript | 5.9+ | Type safety |
+| Tailwind CSS | 4 | Styling |
+| SWR | 2.4 | Data fetching |
+| Framer Motion | 12 | Animations |
+| Lucide React | Latest | Icons |
+| shadcn/ui | Latest | UI primitives |
 
 ---
 
 ## Required Patterns
 
-<!-- Patterns that must always be used -->
-
-(To be filled by the team)
-
----
-
-## Testing Requirements
-
-<!-- What level of testing is expected -->
-
-(To be filled by the team)
+1. **SWR for all server data** (not raw fetch/useEffect)
+2. **api client for mutations** (centralized auth/error handling)
+3. **cn() for conditional classes** (`import { cn } from "@/lib/utils"`)
+4. **Default values for SWR data** (`const { data: accounts = [] } = useAccounts()`)
+5. **ErrorBoundary wrapping** (via layout.tsx)
 
 ---
 
-## Code Review Checklist
+## Forbidden Patterns
 
-<!-- What reviewers should check -->
+1. **No Server Components for interactive pages** — all feature pages need `"use client"`
+2. **No importing backend code** — communicate only via HTTP/WS
+3. **No global CSS for component styles** — use Tailwind utilities
+4. **No hardcoded API base URL** — use `process.env.NEXT_PUBLIC_API_BASE || '/api'`
 
-(To be filled by the team)
+---
+
+## UI/UX Standards
+
+- **Dark theme**: `bg-black`, `text-white`, glass-card effects
+- **Status colors**: Green=active, Red=failed, Blue=connected, Yellow=warning
+- **Loading**: `animate-spin` on buttons, empty state messages in Chinese
+- **Language**: UI text in Chinese, code in English
+
+---
+
+## Common Commands
+
+```bash
+cd frontend
+npm run dev       # Development server
+npm run build     # Production build
+npm run lint      # ESLint
+```
+
+---
+
+## Pre-Commit Checklist
+
+- [ ] `"use client"` on pages using hooks
+- [ ] SWR hooks for data fetching
+- [ ] `mutate()` called after mutations
+- [ ] Default values for SWR data
+- [ ] Chinese text for UI labels
+- [ ] Types match backend schemas

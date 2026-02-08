@@ -1,51 +1,45 @@
 # Type Safety
 
-> Type safety patterns in this project.
+> TypeScript type patterns in Bili-Sentinel frontend.
 
 ---
 
 ## Overview
 
-<!--
-Document your project's type safety conventions here.
-
-Questions to answer:
-- What type system do you use?
-- How are types organized?
-- What validation library do you use?
-- How do you handle type inference?
--->
-
-(To be filled by the team)
+- **TypeScript**: 5.9+
+- **Types location**: `lib/types.ts` — all shared interfaces
+- **Source of truth**: Backend Pydantic schemas, manually mirrored in `types.ts`
 
 ---
 
-## Type Organization
+## Type Conventions
 
-<!-- Where types are defined, shared types vs local types -->
-
-(To be filled by the team)
-
----
-
-## Validation
-
-<!-- Runtime validation patterns (Zod, Yup, io-ts, etc.) -->
-
-(To be filled by the team)
-
----
-
-## Common Patterns
-
-<!-- Type utilities, generics, type guards -->
-
-(To be filled by the team)
+| Pattern | Convention |
+|---------|----------|
+| Entity types | PascalCase matching backend model |
+| Create requests | `{Entity}Create` |
+| Update requests | `Partial<{Entity}Create>` |
+| List responses | `{Entity}ListResponse` with `items`, `total`, `page`, `page_size` |
+| Nullable fields | `fieldName: Type \| null` |
+| Optional fields | `fieldName?: Type` |
+| Dates from backend | `string` (ISO format) |
+| JSON fields | `Record<string, unknown> \| null` |
 
 ---
 
-## Forbidden Patterns
+## Keeping Types in Sync
 
-<!-- any, type assertions, etc. -->
+When backend schema changes:
+1. Update Pydantic schema in `backend/schemas/`
+2. Mirror change in `frontend/src/lib/types.ts`
+3. TypeScript compiler flags mismatches
 
-(To be filled by the team)
+> **Warning**: Types are manually synced. No auto-generation. Always verify both sides.
+
+---
+
+## Common Mistakes
+
+1. **Using `any`** — use proper typed interfaces instead
+2. **Forgetting null checks** — use `account.uid ?? '---'` not `account.uid.toString()`
+3. **Assuming dates are Date objects** — backend returns ISO strings, use `new Date(str)`

@@ -1,12 +1,14 @@
 # Frontend Development Guidelines
 
-> Best practices for frontend development in this project.
+> Best practices for frontend development in Bili-Sentinel.
 
 ---
 
 ## Overview
 
-This directory contains guidelines for frontend development. Fill in each file with your project's specific conventions.
+Bili-Sentinel frontend is a **Next.js 16** app with **React 19**, using **SWR** for data fetching, **Tailwind CSS 4** for styling, **shadcn/ui** for components, and **Framer Motion** for animations.
+
+Dark-themed dashboard with cyberpunk/sentinel aesthetic, real-time WebSocket logs, bento grid layout, and glassmorphism effects.
 
 ---
 
@@ -14,26 +16,33 @@ This directory contains guidelines for frontend development. Fill in each file w
 
 | Guide | Description | Status |
 |-------|-------------|--------|
-| [Directory Structure](./directory-structure.md) | Module organization and file layout | To fill |
-| [Component Guidelines](./component-guidelines.md) | Component patterns, props, composition | To fill |
-| [Hook Guidelines](./hook-guidelines.md) | Custom hooks, data fetching patterns | To fill |
-| [State Management](./state-management.md) | Local state, global state, server state | To fill |
-| [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns | To fill |
-| [Type Safety](./type-safety.md) | Type patterns, validation | To fill |
+| [Directory Structure](./directory-structure.md) | File organization, naming | Done |
+| [Component Guidelines](./component-guidelines.md) | Component patterns, styling | Done |
+| [Hook Guidelines](./hook-guidelines.md) | SWR hooks, WebSocket, API client | Done |
+| [State Management](./state-management.md) | SWR server state, local state | Done |
+| [Quality Guidelines](./quality-guidelines.md) | Code standards, UI/UX patterns | Done |
+| [Type Safety](./type-safety.md) | TypeScript interfaces, backend sync | Done |
 
 ---
 
-## How to Fill These Guidelines
+## Quick Reference
 
-For each guideline file:
+### Key Files
 
-1. Document your project's **actual conventions** (not ideals)
-2. Include **code examples** from your codebase
-3. List **forbidden patterns** and why
-4. Add **common mistakes** your team has made
+| File | Purpose |
+|------|--------|
+| `lib/api.ts` | API client with auth headers |
+| `lib/swr.ts` | SWR hooks per resource |
+| `lib/types.ts` | TypeScript interfaces (mirrors backend) |
+| `lib/websocket.ts` | Real-time log stream hook |
+| `app/layout.tsx` | Root layout with Sidebar |
+| `app/api/[...path]/route.ts` | API proxy to backend |
 
-The goal is to help AI assistants and new team members understand how YOUR project works.
+### Commands
 
----
-
-**Language**: All documentation should be written in **English**.
+```bash
+cd frontend
+npm run dev       # Development
+npm run build     # Build
+npm run lint      # Lint
+```
