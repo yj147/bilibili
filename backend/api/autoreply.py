@@ -8,6 +8,8 @@ import asyncio
 from backend.models.task import AutoReplyConfig, AutoReplyConfigCreate, AutoReplyConfigUpdate, AutoReplyStatus
 from backend.database import execute_query, execute_insert
 
+AUTOREPLY_ALLOWED_UPDATE_FIELDS = {"keyword", "response", "priority", "is_active"}
+
 router = APIRouter()
 
 # Global service state
@@ -39,7 +41,7 @@ async def update_autoreply_config(config_id: int, config: AutoReplyConfigUpdate)
     updates = []
     params = []
     for field, value in config.model_dump(exclude_unset=True).items():
-        if value is not None:
+        if value is not None and field in AUTOREPLY_ALLOWED_UPDATE_FIELDS:
             updates.append(f"{field} = ?")
             params.append(value)
     
