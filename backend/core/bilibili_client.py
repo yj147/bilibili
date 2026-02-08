@@ -54,9 +54,10 @@ class BilibiliClient:
             signer = BilibiliSign(img_key, sub_key)
             params = signer.sign(params)
 
+        last_error = None
         for attempt in range(retries):
+            try:
                 if method == "POST":
-                    # Add CSRF token for POST requests
                     data["csrf"] = self.cookies.get("bili_jct", "")
                     resp = await self._client.post(url, params=params, data=data)
                 else:
@@ -64,15 +65,19 @@ class BilibiliClient:
                 
                 res_json = resp.json()
                 
-                # Rate limit / Frequency control detection
-                if res_json.get("code") in [-412, 862, 101]: # 412 is common for frequency
+                if res_json.get("code") in [-412, 862, 101]:
                     wait_time = (attempt + 1) * random.uniform(30, 60)
                     print(f"[{self.auth.accounts[self.account_index]['name']}] Frequency limit hit. Sleeping for {wait_time:.1f}s...")
                     await asyncio.sleep(wait_time)
                     continue
                 
                 return res_json
-        return {"code": -999, "message": "Max retries reached due to rate limits"}
+            except (httpx.TimeoutException, httpx.ConnectError, httpx.ReadError) as e:
+                last_error = e
+                wait_time = (attempt + 1) * 2
+                print(f"[{self.auth.accounts[self.account_index]['name']}] Network error: {e}. Retrying in {wait_time}s...")
+                await asyncio.sleep(wait_time)
+        return {"code": -999, "message": f"Max retries reached: {last_error or 'rate limits'}"}
 
     async def _post(self, url: str, params: dict = None, data: dict = None, sign: bool = False):
         return await self._request("POST", url, params, data, sign)
