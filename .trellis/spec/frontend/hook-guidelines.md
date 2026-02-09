@@ -47,7 +47,7 @@ export function useTargets(params: Record<string, string> = {}) {
 | `useAutoReplyStatus()` | `AutoReplyStatus` | Every 5s |
 | `useSchedulerTasks()` | `ScheduledTask[]` | On focus |
 | `useSchedulerHistory(limit)` | `ReportLog[]` | On focus |
-| `useConfigs()` | `Record<string, any>` | On focus |
+| `useConfigs()` | `Record<string, unknown>` | On focus |
 | `useSystemInfo()` | System info object | Every 30s |
 
 ### Refresh Intervals
@@ -108,7 +108,7 @@ const { logs, connected } = useLogStream(maxLogs);
 interface LogEntry {
   type: string;      // "report", "scheduler", "autoreply", "error"
   message: string;
-  data: Record<string, any>;
+  data: Record<string, unknown>;
   timestamp: number;
 }
 ```

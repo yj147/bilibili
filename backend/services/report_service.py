@@ -225,6 +225,110 @@ async def execute_batch_reports(target_ids: list[int] | None, account_ids: list[
     }, None
 
 
+async def scan_and_report_comments(
+    bvid: str,
+    account_id: int,
+    reason_id: int = 9,
+    reason_text: str = "",
+    max_pages: int = 5,
+    auto_report: bool = False,
+) -> dict:
+    """Scan comments of a video, create targets, and optionally batch report them."""
+    from backend.core.bilibili_client import BilibiliClient
+    from backend.core.bilibili_auth import BilibiliAuth
+    from backend.services import account_service, target_service
+    from backend.api.websocket import broadcast_log
+
+    account = await account_service.get_account(account_id)
+    if not account:
+        return {"error": "Account not found"}
+
+    auth = BilibiliAuth.from_db_account(account)
+    errors: list[str] = []
+    comments_found = 0
+    targets_created = 0
+    reports_executed = 0
+    reports_successful = 0
+    aid = 0
+
+    async with BilibiliClient(auth, account_index=0) as client:
+        # Step 1: Resolve BV -> aid
+        info = await client.get_video_info(bvid)
+        if info.get("code") != 0:
+            msg = info.get("message", "Failed to get video info")
+            return {"error": msg}
+        aid = info["data"]["aid"]
+        await broadcast_log("scan", f"Video {bvid} resolved to aid={aid}")
+
+        # Step 2: Paginate through comments
+        all_replies: list[dict] = []
+        for page in range(1, max_pages + 1):
+            resp = await client.get_comments(oid=aid, type_code=1, pn=page, ps=20)
+            if resp.get("code") != 0:
+                errors.append(f"Page {page}: {resp.get('message', 'error')}")
+                break
+
+            replies = (resp.get("data") or {}).get("replies") or []
+            if not replies:
+                break
+            all_replies.extend(replies)
+            await broadcast_log("scan", f"Page {page}: fetched {len(replies)} comments (total {len(all_replies)})")
+
+            # Anti-detection delay between pages
+            await asyncio.sleep(_human_delay(MIN_DELAY, MAX_DELAY))
+
+        comments_found = len(all_replies)
+        await broadcast_log("scan", f"Scan complete: {comments_found} comments found for {bvid}")
+
+        # Step 3: Create targets for each comment
+        for reply in all_replies:
+            rpid = reply.get("rpid")
+            if not rpid:
+                continue
+            try:
+                await target_service.create_target(
+                    target_type="comment",
+                    identifier=str(rpid),
+                    aid=aid,
+                    reason_id=reason_id,
+                    reason_text=reason_text,
+                )
+                targets_created += 1
+            except Exception as e:
+                errors.append(f"Create target rpid={rpid}: {e}")
+
+        await broadcast_log("scan", f"Created {targets_created} targets from {comments_found} comments")
+
+        # Step 4: Optionally auto-report
+        if auto_report and targets_created > 0:
+            # Fetch the newly created targets by querying recent pending comment targets for this aid
+            pending = await execute_query(
+                "SELECT * FROM targets WHERE type = 'comment' AND aid = ? AND status = 'pending' ORDER BY id DESC LIMIT ?",
+                (aid, targets_created),
+            )
+            for target in pending:
+                result = await execute_single_report(target, account)
+                reports_executed += 1
+                if result.get("success"):
+                    reports_successful += 1
+                await asyncio.sleep(_human_delay(MIN_DELAY, MAX_DELAY))
+
+            await broadcast_log(
+                "scan",
+                f"Auto-report done: {reports_successful}/{reports_executed} successful",
+            )
+
+    return {
+        "bvid": bvid,
+        "aid": aid,
+        "comments_found": comments_found,
+        "targets_created": targets_created,
+        "reports_executed": reports_executed,
+        "reports_successful": reports_successful,
+        "errors": errors,
+    }
+
+
 async def get_report_logs(limit: int = 100):
     return await execute_query(
         """SELECT l.*, a.name as account_name

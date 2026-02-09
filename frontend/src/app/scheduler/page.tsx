@@ -1,23 +1,39 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   Calendar, Clock, Play, Pause, RefreshCw, History,
-  CheckCircle2, AlertCircle, Plus, Loader2, X, Trash2
+  CheckCircle2, AlertCircle, Plus, Loader2, X, Trash2, Pencil
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useSchedulerTasks, useSchedulerHistory } from "@/lib/swr";
+import type { ScheduledTask } from "@/lib/types";
+import ToastContainer, { ToastItem, createToast } from "@/components/Toast";
 
 export default function SchedulerPage() {
   const { data: tasks = [], mutate: mutateTasks, isLoading: tasksLoading } = useSchedulerTasks();
   const { data: history = [], mutate: mutateHistory } = useSchedulerHistory(20);
   const loading = tasksLoading;
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingTask, setEditingTask] = useState<ScheduledTask | null>(null);
   const [formData, setFormData] = useState({
     name: "", task_type: "report_batch" as string,
     cron_expression: "", interval_seconds: 300
   });
+  const [editFormData, setEditFormData] = useState({
+    name: "", cron_expression: "", interval_seconds: 300,
+    config_json: "" // stored as JSON string for editing
+  });
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  const addToast = useCallback((type: ToastItem["type"], message: string) => {
+    setToasts((prev) => [...prev, createToast(type, message)]);
+  }, []);
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
   const handleCreate = async () => {
     try {
@@ -31,14 +47,15 @@ export default function SchedulerPage() {
       setFormData({ name: "", task_type: "report_batch", cron_expression: "", interval_seconds: 300 });
       mutateTasks();
       mutateHistory();
-    } catch { alert("创建失败"); }
+      addToast("success", "任务创建成功");
+    } catch { addToast("error", "创建失败"); }
   };
 
   const handleToggle = async (id: number) => {
     try {
       await api.scheduler.toggleTask(id);
       mutateTasks();
-    } catch { alert("操作失败"); }
+    } catch { addToast("error", "操作失败"); }
   };
 
   const handleDelete = async (id: number) => {
@@ -47,7 +64,39 @@ export default function SchedulerPage() {
       await api.scheduler.deleteTask(id);
       mutateTasks();
       mutateHistory();
-    } catch { alert("删除失败"); }
+      addToast("success", "任务已删除");
+    } catch { addToast("error", "删除失败"); }
+  };
+
+  const handleEdit = (task: ScheduledTask) => {
+    setEditingTask(task);
+    setEditFormData({
+      name: task.name,
+      cron_expression: task.cron_expression || "",
+      interval_seconds: task.interval_seconds || 300,
+      config_json: task.config_json ? JSON.stringify(task.config_json, null, 2) : "",
+    });
+    setShowEditModal(true);
+  };
+
+  const handleEditSubmit = async () => {
+    if (!editingTask) return;
+    try {
+      const data: Record<string, unknown> = {
+        name: editFormData.name,
+        cron_expression: editFormData.cron_expression || undefined,
+        interval_seconds: editFormData.cron_expression ? undefined : editFormData.interval_seconds,
+      };
+      if (editFormData.config_json.trim()) {
+        try { data.config_json = JSON.parse(editFormData.config_json); }
+        catch { addToast("error", "config_json 格式无效"); return; }
+      }
+      await api.scheduler.updateTask(editingTask.id, data as { name?: string; cron_expression?: string; interval_seconds?: number; config_json?: Record<string, unknown> });
+      setShowEditModal(false);
+      setEditingTask(null);
+      mutateTasks();
+      addToast("success", "任务更新成功");
+    } catch { addToast("error", "更新失败"); }
   };
 
   return (
@@ -103,6 +152,9 @@ export default function SchedulerPage() {
                 <span className={`text-[10px] px-2 py-0.5 rounded-full ${task.is_active ? 'bg-green-500/10 text-green-400' : 'bg-zinc-500/10 text-zinc-400'}`}>
                   {task.is_active ? 'ACTIVE' : 'PAUSED'}
                 </span>
+                <button onClick={() => handleEdit(task)} className="p-2 text-white/20 hover:text-orange-400 transition-colors">
+                  <Pencil size={18} />
+                </button>
                 <button onClick={() => handleToggle(task.id)} className="p-3 rounded-full bg-white/5 hover:bg-white/10 text-white/40 hover:text-white transition-all">
                   {task.is_active ? <Pause size={18} /> : <Play size={18} />}
                 </button>
@@ -137,6 +189,7 @@ export default function SchedulerPage() {
         </div>
       </div>
 
+      {/* Create task modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} onClick={() => setShowAddModal(false)} className="absolute inset-0 bg-black/80 backdrop-blur-md" />
@@ -174,6 +227,44 @@ export default function SchedulerPage() {
           </motion.div>
         </div>
       )}
+
+      {/* Edit task modal */}
+      {showEditModal && editingTask && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} onClick={() => setShowEditModal(false)} className="absolute inset-0 bg-black/80 backdrop-blur-md" />
+          <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="glass-card w-full max-w-md rounded-3xl p-8 relative z-10 border-white/10 shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold flex items-center gap-2"><Pencil size={18} className="text-orange-400" /> 编辑任务</h2>
+              <button onClick={() => setShowEditModal(false)}><X size={20} className="text-white/40" /></button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs text-white/40 mb-1 block">任务名称</label>
+                <input value={editFormData.name} onChange={(e) => setEditFormData({...editFormData, name: e.target.value})}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-orange-500 outline-none" />
+              </div>
+              <div>
+                <label className="text-xs text-white/40 mb-1 block">Cron 表达式</label>
+                <input value={editFormData.cron_expression} onChange={(e) => setEditFormData({...editFormData, cron_expression: e.target.value})}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-orange-500 outline-none" placeholder="留空则使用间隔秒数" />
+              </div>
+              <div>
+                <label className="text-xs text-white/40 mb-1 block">间隔秒数</label>
+                <input type="number" value={editFormData.interval_seconds} onChange={(e) => setEditFormData({...editFormData, interval_seconds: parseInt(e.target.value) || 300})}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-orange-500 outline-none" />
+              </div>
+              <div>
+                <label className="text-xs text-white/40 mb-1 block">配置 JSON (可选)</label>
+                <textarea value={editFormData.config_json} onChange={(e) => setEditFormData({...editFormData, config_json: e.target.value})}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-orange-500 outline-none h-24 resize-none font-mono" placeholder='{"key": "value"}' />
+              </div>
+              <button onClick={handleEditSubmit} className="w-full bg-orange-600 py-3 rounded-xl font-bold hover:bg-orange-500 transition-all mt-2">保存更改</button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

@@ -5,6 +5,7 @@ from typing import List
 from backend.models.report import (
     ReportExecuteRequest, ReportBatchExecuteRequest,
     ReportLog, ReportResult, BatchReportResult,
+    CommentScanRequest, CommentScanResult,
 )
 from backend.services import report_service
 
@@ -44,3 +45,19 @@ async def get_report_logs(limit: int = 100):
 async def get_target_logs(target_id: int):
     """Get logs for a specific target."""
     return await report_service.get_target_logs(target_id)
+
+
+@router.post("/scan-comments", response_model=CommentScanResult)
+async def scan_comments(request: CommentScanRequest):
+    """Scan video comments, create targets, and optionally auto-report."""
+    result = await report_service.scan_and_report_comments(
+        bvid=request.bvid,
+        account_id=request.account_id,
+        reason_id=request.reason_id,
+        reason_text=request.reason_text,
+        max_pages=request.max_pages,
+        auto_report=request.auto_report,
+    )
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result

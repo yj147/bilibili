@@ -41,7 +41,7 @@ export function useSchedulerHistory(limit = 20) {
 }
 
 export function useConfigs() {
-  return useSWR<Record<string, any>>('/config/', fetcher);
+  return useSWR<Record<string, unknown>>('/config/', fetcher);
 }
 
 export function useSystemInfo() {

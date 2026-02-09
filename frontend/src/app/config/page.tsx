@@ -1,13 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { 
-  Settings, 
-  Shield, 
-  Zap, 
-  Database, 
-  Bell, 
-  Lock,
+import React, { useState, useEffect, useCallback } from "react";
+import {
+  Settings,
+  Shield,
+  Database,
+  Bell,
   Eye,
   Github,
   Save,
@@ -16,6 +14,7 @@ import {
 } from "lucide-react";
 import { useConfigs, useSystemInfo } from "@/lib/swr";
 import { api } from "@/lib/api";
+import ToastContainer, { ToastItem, createToast } from "@/components/Toast";
 
 const ConfigSection = ({ title, icon: Icon, children }: { title: string; icon: React.ElementType; children: React.ReactNode }) => (
   <div className="glass-card rounded-3xl p-8 border-white/5 space-y-6">
@@ -47,6 +46,14 @@ export default function ConfigPage() {
   const { data: configs, mutate: mutateConfigs } = useConfigs();
   const { data: systemInfo } = useSystemInfo();
   const [saving, setSaving] = useState(false);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  const addToast = useCallback((type: ToastItem["type"], message: string) => {
+    setToasts((prev) => [...prev, createToast(type, message)]);
+  }, []);
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
   const [formState, setFormState] = useState({
     min_delay: "2",
@@ -55,17 +62,19 @@ export default function ConfigPage() {
     webhook_url: "",
     notify_level: "error",
     auto_clean_logs: true,
+    log_retention_days: "30",
   });
 
   useEffect(() => {
     if (configs) {
       setFormState(prev => ({
-        min_delay: configs.min_delay?.toString() ?? prev.min_delay,
-        max_delay: configs.max_delay?.toString() ?? prev.max_delay,
-        ua_rotation: configs.ua_rotation ?? prev.ua_rotation,
-        webhook_url: configs.webhook_url ?? prev.webhook_url,
-        notify_level: configs.notify_level ?? prev.notify_level,
-        auto_clean_logs: configs.auto_clean_logs ?? prev.auto_clean_logs,
+        min_delay: String(configs.min_delay ?? prev.min_delay),
+        max_delay: String(configs.max_delay ?? prev.max_delay),
+        ua_rotation: Boolean(configs.ua_rotation ?? prev.ua_rotation),
+        webhook_url: String(configs.webhook_url ?? prev.webhook_url),
+        notify_level: String(configs.notify_level ?? prev.notify_level),
+        auto_clean_logs: Boolean(configs.auto_clean_logs ?? prev.auto_clean_logs),
+        log_retention_days: String(configs.log_retention_days ?? prev.log_retention_days),
       }));
     }
   }, [configs]);
@@ -80,11 +89,12 @@ export default function ConfigPage() {
         webhook_url: formState.webhook_url,
         notify_level: formState.notify_level,
         auto_clean_logs: formState.auto_clean_logs,
+        log_retention_days: parseInt(formState.log_retention_days) || 30,
       });
       mutateConfigs();
-      alert("配置已保存");
+      addToast("success", "配置已保存");
     } catch {
-      alert("保存失败");
+      addToast("error", "保存失败");
     } finally {
       setSaving(false);
     }
@@ -114,8 +124,8 @@ export default function ConfigPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Anti-Detection Settings */}
         <ConfigSection title="防封策略" icon={Shield}>
-          <ConfigItem 
-            label="最小执行延迟" 
+          <ConfigItem
+            label="最小执行延迟"
             description="任务执行账号切换时的最小等待时间（秒）。设置过低会增加封号风险。"
           >
             <div className="flex items-center gap-3">
@@ -125,8 +135,8 @@ export default function ConfigPage() {
               <span className="text-xs font-mono text-blue-400">{formState.min_delay}s</span>
             </div>
           </ConfigItem>
-          <ConfigItem 
-            label="最大执行延迟" 
+          <ConfigItem
+            label="最大执行延迟"
             description="任务执行账号切换时的最大等待时间（秒）。"
           >
             <div className="flex items-center gap-3">
@@ -136,8 +146,8 @@ export default function ConfigPage() {
               <span className="text-xs font-mono text-blue-400">{formState.max_delay}s</span>
             </div>
           </ConfigItem>
-          <ConfigItem 
-            label="UA 自动轮换" 
+          <ConfigItem
+            label="UA 自动轮换"
             description="每次请求随机选择不同的 User-Agent，模拟不同设备环境。"
           >
             <button onClick={() => setFormState({...formState, ua_rotation: !formState.ua_rotation})}
@@ -149,16 +159,16 @@ export default function ConfigPage() {
 
         {/* Integration Settings */}
         <ConfigSection title="通知集成" icon={Bell}>
-          <ConfigItem 
-            label="Webhook 通知" 
+          <ConfigItem
+            label="Webhook 通知"
             description="当任务失败或账号失效时，向指定的 Webhook 发送通知。"
           >
             <input type="text" placeholder="https://..." value={formState.webhook_url}
               onChange={(e) => setFormState({...formState, webhook_url: e.target.value})}
               className="bg-black/40 border border-white/5 rounded-lg px-3 py-2 text-xs w-full focus:border-blue-500 outline-none" />
           </ConfigItem>
-          <ConfigItem 
-            label="通知级别" 
+          <ConfigItem
+            label="通知级别"
             description="选择哪些类型的日志需要触发通知。"
           >
             <select value={formState.notify_level}
@@ -173,20 +183,22 @@ export default function ConfigPage() {
 
         {/* Data Management */}
         <ConfigSection title="数据与存储" icon={Database}>
-          <ConfigItem 
-            label="自动清理日志" 
-            description="保留最近 30 天的执行日志，自动删除过期数据以节省空间。"
+          <ConfigItem
+            label="自动清理日志"
+            description="自动删除过期的执行日志以节省空间。"
           >
             <button onClick={() => setFormState({...formState, auto_clean_logs: !formState.auto_clean_logs})}
               className={`w-12 h-6 rounded-full relative p-1 cursor-pointer transition-colors ${formState.auto_clean_logs ? 'bg-blue-600' : 'bg-zinc-600'}`}>
               <div className={`absolute w-4 h-4 bg-white rounded-full shadow-sm transition-all ${formState.auto_clean_logs ? 'right-1' : 'left-1'}`} />
             </button>
           </ConfigItem>
-          <ConfigItem 
-            label="数据库备份" 
-            description="导出当前的 SQLite 数据库备份文件。"
+          <ConfigItem
+            label="日志保留天数"
+            description="日志保留多少天后自动清理。"
           >
-            <button className="text-xs px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg transition-colors">立即导出</button>
+            <input type="number" min="1" max="365" value={formState.log_retention_days}
+              onChange={(e) => setFormState({...formState, log_retention_days: e.target.value})}
+              className="bg-black/40 border border-white/5 rounded-lg px-3 py-2 text-xs w-20 focus:border-blue-500 outline-none text-center" />
           </ConfigItem>
         </ConfigSection>
 
@@ -219,15 +231,19 @@ export default function ConfigPage() {
             </div>
           </div>
           <div className="mt-8 flex gap-4">
-            <button className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center gap-2 text-xs transition-all">
+            <a href="https://github.com" target="_blank" rel="noopener noreferrer"
+              className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center gap-2 text-xs transition-all cursor-pointer">
               <Github size={14} /> GitHub
-            </button>
-            <button className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center gap-2 text-xs transition-all">
+            </a>
+            <a href="#" onClick={(e) => { e.preventDefault(); addToast("info", "文档正在建设中"); }}
+              className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center gap-2 text-xs transition-all cursor-pointer">
               <Eye size={14} /> 项目文档
-            </button>
+            </a>
           </div>
         </div>
       </div>
+
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

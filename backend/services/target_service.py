@@ -120,3 +120,10 @@ async def increment_retry_and_set_status(target_id: int, status: str):
 
 async def get_pending_targets():
     return await execute_query("SELECT * FROM targets WHERE status = 'pending'")
+
+
+async def export_targets(status: Optional[str] = None):
+    """Export all targets, optionally filtered by status."""
+    if status:
+        return await execute_query("SELECT * FROM targets WHERE status = ? ORDER BY created_at DESC", (status,))
+    return await execute_query("SELECT * FROM targets ORDER BY created_at DESC")

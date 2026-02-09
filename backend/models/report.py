@@ -58,3 +58,22 @@ class BatchReportResult(BaseModel):
     successful: int
     failed: int
     results: list[ReportResult]
+
+
+class CommentScanRequest(BaseModel):
+    bvid: str
+    account_id: int
+    reason_id: int = 9
+    reason_text: str = ""
+    max_pages: int = 5
+    auto_report: bool = False
+
+
+class CommentScanResult(BaseModel):
+    bvid: str
+    aid: int
+    comments_found: int
+    targets_created: int
+    reports_executed: int = 0
+    reports_successful: int = 0
+    errors: list[str] = []

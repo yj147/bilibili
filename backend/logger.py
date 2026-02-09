@@ -2,6 +2,7 @@
 Bili-Sentinel Logging Module
 """
 import logging
+import os
 import sys
 
 
@@ -17,7 +18,8 @@ def get_logger(name: str = "sentinel") -> logging.Logger:
             )
         )
         logger.addHandler(handler)
-        logger.setLevel(logging.DEBUG)
+        level_name = os.getenv("SENTINEL_LOG_LEVEL", "INFO").upper()
+        logger.setLevel(getattr(logging, level_name, logging.INFO))
     return logger
 
 

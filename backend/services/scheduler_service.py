@@ -44,6 +44,18 @@ async def start_scheduler():
         )
         logger.info("Created built-in cookie health check task (every 6h)")
 
+    # Built-in: log cleanup every 24 hours
+    existing_cleanup = await execute_query(
+        "SELECT id FROM scheduled_tasks WHERE task_type = 'log_cleanup' LIMIT 1"
+    )
+    if not existing_cleanup:
+        await create_task(
+            name="Log Cleanup",
+            task_type="log_cleanup",
+            interval_seconds=86400,
+        )
+        logger.info("Created built-in log cleanup task (every 24h)")
+
 
 def stop_scheduler():
     """Stop the APScheduler."""
@@ -88,6 +100,15 @@ async def _run_report_batch(task_id: int):
 
 async def _run_autoreply_poll(task_id: int):
     """Job function: poll private messages and auto-reply."""
+    from backend.services.autoreply_service import _autoreply_running
+    if _autoreply_running:
+        logger.warning(
+            "Standalone autoreply service is running. "
+            "Skipping scheduler autoreply_poll (task #%d) to avoid double-replies.",
+            task_id,
+        )
+        return
+
     from backend.core.bilibili_client import BilibiliClient
     from backend.core.bilibili_auth import BilibiliAuth
     from backend.api.websocket import broadcast_log
@@ -127,6 +148,16 @@ async def _run_autoreply_poll(task_id: int):
                                 reply_text = resp
                                 break
                         await client.send_private_message(talker_id, reply_text)
+                        # Log to report_logs for unified activity tracking
+                        await execute_insert(
+                            """INSERT INTO report_logs (target_id, account_id, action, request_data, response_data, success, error_message)
+                               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                            (
+                                None, account["id"], "autoreply",
+                                json.dumps({"talker_id": talker_id, "reply": reply_text}),
+                                None, True, None,
+                            ),
+                        )
                         await execute_query(
                             "INSERT INTO autoreply_state (account_id, talker_id, last_msg_ts) VALUES (?, ?, ?) "
                             "ON CONFLICT(account_id, talker_id) DO UPDATE SET last_msg_ts = excluded.last_msg_ts",
@@ -176,7 +207,45 @@ async def _run_cookie_health_check(task_id: int):
         "UPDATE scheduled_tasks SET last_run_at = datetime('now') WHERE id = ?", (task_id,)
     )
 
-_JOB_FUNCTIONS = {"report_batch": _run_report_batch, "autoreply_poll": _run_autoreply_poll, "cookie_health_check": _run_cookie_health_check}
+
+async def _run_log_cleanup(task_id: int):
+    """Job function: delete old report_logs based on system config."""
+    from backend.services.config_service import get_config
+    from backend.api.websocket import broadcast_log
+
+    auto_clean = await get_config("auto_clean_logs")
+    if auto_clean not in (True, "true", "1"):
+        logger.info("[Log Cleanup] auto_clean_logs is disabled, skipping")
+        await execute_query(
+            "UPDATE scheduled_tasks SET last_run_at = datetime('now') WHERE id = ?", (task_id,)
+        )
+        return
+
+    retention_days = await get_config("log_retention_days")
+    try:
+        retention_days = int(retention_days)
+    except (TypeError, ValueError):
+        retention_days = 30
+
+    count_rows = await execute_query(
+        "SELECT COUNT(*) as count FROM report_logs WHERE executed_at < datetime('now', ?)",
+        (f"-{retention_days} days",),
+    )
+    count = count_rows[0]["count"] if count_rows else 0
+
+    if count > 0:
+        await execute_query(
+            "DELETE FROM report_logs WHERE executed_at < datetime('now', ?)",
+            (f"-{retention_days} days",),
+        )
+        logger.info("[Log Cleanup] Deleted %d logs older than %d days", count, retention_days)
+        await broadcast_log("system", f"Log cleanup: deleted {count} logs older than {retention_days} days")
+
+    await execute_query(
+        "UPDATE scheduled_tasks SET last_run_at = datetime('now') WHERE id = ?", (task_id,)
+    )
+
+_JOB_FUNCTIONS = {"report_batch": _run_report_batch, "autoreply_poll": _run_autoreply_poll, "cookie_health_check": _run_cookie_health_check, "log_cleanup": _run_log_cleanup}
 
 
 # ── Job registration ──────────────────────────────────────────────────────
@@ -247,13 +316,16 @@ async def get_task(task_id: int):
     return _parse_config_json(rows[0])
 
 
+ALLOWED_TASK_UPDATE_FIELDS = {"name", "task_type", "cron_expression", "interval_seconds", "is_active", "config_json"}
+
+
 async def update_task(task_id: int, fields: dict):
     updates, params = [], []
     data = dict(fields)
     if "config_json" in data and data["config_json"] is not None:
         data["config_json"] = json.dumps(data["config_json"])
     for field, value in data.items():
-        if value is not None:
+        if value is not None and field in ALLOWED_TASK_UPDATE_FIELDS:
             updates.append(f"{field} = ?")
             params.append(value)
     if not updates:

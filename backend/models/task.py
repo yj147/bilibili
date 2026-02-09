@@ -6,7 +6,7 @@ from typing import Optional, Literal
 from datetime import datetime
 
 
-TaskType = Literal["report_batch", "autoreply_poll"]
+TaskType = Literal["report_batch", "autoreply_poll", "cookie_health_check", "log_cleanup"]
 
 
 class ScheduledTaskBase(BaseModel):

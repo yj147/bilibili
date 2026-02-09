@@ -1,14 +1,16 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   MessageSquare, Plus, Search, Trash2,
   ToggleLeft, ToggleRight, MessageCircle, Hash,
-  CornerDownRight, Save, Zap, Loader2, X
+  CornerDownRight, Save, Zap, Loader2, X, Pencil
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAutoReplyConfigs, useAutoReplyStatus } from "@/lib/swr";
+import type { AutoReplyConfig } from "@/lib/types";
+import ToastContainer, { ToastItem, createToast } from "@/components/Toast";
 
 export default function AutoReplyPage() {
   const { data: configs = [], mutate: mutateConfigs, isLoading: configsLoading } = useAutoReplyConfigs();
@@ -19,13 +21,26 @@ export default function AutoReplyPage() {
   const rules = configs.filter((c) => c.keyword !== null);
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingRule, setEditingRule] = useState<AutoReplyConfig | null>(null);
   const [formData, setFormData] = useState({ keyword: "", response: "", priority: 0 });
+  const [editFormData, setEditFormData] = useState({ keyword: "", response: "", priority: 0 });
   const [defaultReply, setDefaultReply] = useState("抱歉，我现在有点忙，稍后会回复你哦~");
+  const [defaultReplyInitialized, setDefaultReplyInitialized] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
 
-  useEffect(() => {
-    if (defaultConfig) setDefaultReply(defaultConfig.response);
-  }, [defaultConfig]);
+  const addToast = useCallback((type: ToastItem["type"], message: string) => {
+    setToasts((prev) => [...prev, createToast(type, message)]);
+  }, []);
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  if (defaultConfig && !defaultReplyInitialized) {
+    setDefaultReply(defaultConfig.response);
+    setDefaultReplyInitialized(true);
+  }
 
   const handleAddRule = async () => {
     try {
@@ -33,32 +48,55 @@ export default function AutoReplyPage() {
       setShowAddModal(false);
       setFormData({ keyword: "", response: "", priority: 0 });
       mutateConfigs();
-    } catch { alert("添加失败"); }
+      addToast("success", "规则添加成功");
+    } catch { addToast("error", "添加失败"); }
   };
 
   const handleDeleteRule = async (id: number) => {
     if (!confirm("确定删除此规则？")) return;
-    try { await api.autoreply.deleteConfig(id); mutateConfigs(); } catch { alert("删除失败"); }
+    try { await api.autoreply.deleteConfig(id); mutateConfigs(); addToast("success", "规则已删除"); }
+    catch { addToast("error", "删除失败"); }
   };
 
   const handleToggleRule = async (rule: AutoReplyConfig) => {
     try {
       await api.autoreply.updateConfig(rule.id, { is_active: !rule.is_active });
       mutateConfigs();
-    } catch { alert("操作失败"); }
+    } catch { addToast("error", "操作失败"); }
+  };
+
+  const handleEditRule = (rule: AutoReplyConfig) => {
+    setEditingRule(rule);
+    setEditFormData({
+      keyword: rule.keyword || "",
+      response: rule.response,
+      priority: rule.priority,
+    });
+    setShowEditModal(true);
+  };
+
+  const handleEditSubmit = async () => {
+    if (!editingRule) return;
+    try {
+      await api.autoreply.updateConfig(editingRule.id, editFormData);
+      setShowEditModal(false);
+      setEditingRule(null);
+      mutateConfigs();
+      addToast("success", "规则更新成功");
+    } catch { addToast("error", "更新失败"); }
   };
 
   const handleSaveDefault = async () => {
     try {
-      const configs = await api.autoreply.getConfigs();
-      const existing = configs.find((c) => c.keyword === null);
+      const allConfigs = await api.autoreply.getConfigs();
+      const existing = allConfigs.find((c) => c.keyword === null);
       if (existing) {
         await api.autoreply.updateConfig(existing.id, { response: defaultReply });
       } else {
         await api.autoreply.createConfig({ keyword: null, response: defaultReply, priority: -1, is_active: true });
       }
-      alert("全局配置已保存");
-    } catch { alert("保存失败"); }
+      addToast("success", "全局配置已保存");
+    } catch { addToast("error", "保存失败"); }
   };
 
   const handleToggleService = async () => {
@@ -66,7 +104,7 @@ export default function AutoReplyPage() {
       if (serviceStatus.is_running) { await api.autoreply.stop(); }
       else { await api.autoreply.start(30); }
       mutateStatus();
-    } catch { alert("操作失败"); }
+    } catch { addToast("error", "操作失败"); }
   };
 
   const filteredRules = rules.filter(r =>
@@ -140,6 +178,9 @@ export default function AutoReplyPage() {
                 <p className="text-sm text-white/60 leading-relaxed italic">&quot;{rule.response}&quot;</p>
               </div>
               <div className="mt-4 flex justify-end gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onClick={() => handleEditRule(rule)} className="text-xs flex items-center gap-1.5 text-white/40 hover:text-orange-400 transition-colors">
+                  <Pencil size={14} /> 编辑
+                </button>
                 <button onClick={() => handleDeleteRule(rule.id)} className="text-xs flex items-center gap-1.5 text-white/40 hover:text-red-400 transition-colors">
                   <Trash2 size={14} /> 删除
                 </button>
@@ -177,6 +218,7 @@ export default function AutoReplyPage() {
         </div>
       </div>
 
+      {/* Add rule modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} onClick={() => setShowAddModal(false)} className="absolute inset-0 bg-black/80 backdrop-blur-md" />
@@ -206,6 +248,39 @@ export default function AutoReplyPage() {
           </motion.div>
         </div>
       )}
+
+      {/* Edit rule modal */}
+      {showEditModal && editingRule && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} onClick={() => setShowEditModal(false)} className="absolute inset-0 bg-black/80 backdrop-blur-md" />
+          <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="glass-card w-full max-w-md rounded-3xl p-8 relative z-10 border-white/10 shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold flex items-center gap-2"><Pencil size={18} className="text-orange-400" /> 编辑规则</h2>
+              <button onClick={() => setShowEditModal(false)}><X size={20} className="text-white/40" /></button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs text-white/40 mb-1 block">触发关键词</label>
+                <input value={editFormData.keyword} onChange={(e) => setEditFormData({...editFormData, keyword: e.target.value})}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-orange-500 outline-none" />
+              </div>
+              <div>
+                <label className="text-xs text-white/40 mb-1 block">回复内容</label>
+                <textarea value={editFormData.response} onChange={(e) => setEditFormData({...editFormData, response: e.target.value})}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-orange-500 outline-none h-24 resize-none" />
+              </div>
+              <div>
+                <label className="text-xs text-white/40 mb-1 block">优先级</label>
+                <input type="number" value={editFormData.priority} onChange={(e) => setEditFormData({...editFormData, priority: parseInt(e.target.value) || 0})}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-orange-500 outline-none" />
+              </div>
+              <button onClick={handleEditSubmit} className="w-full bg-orange-600 py-3 rounded-xl font-bold hover:bg-orange-500 transition-all mt-2">保存更改</button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

@@ -145,44 +145,71 @@ class BilibiliClient:
         Reports a user via space.bilibili.com/ajax/report/add.
         reason: content type - 1=avatar, 2=nickname, 3=signature
         reason_v2: report category - 4=personal_attack, etc.
-        Note: Uses a separate httpx client with manual Cookie header because
-        the main client's cookie jar binds to api.bilibili.com and won't
-        send cookies to the space.bilibili.com subdomain.
+        Uses _request_cross_domain to get retry logic on the cross-subdomain request.
         """
         url = "https://space.bilibili.com/ajax/report/add"
-        bili_jct = self.cookies.get("bili_jct", "")
         data = {
             "mid": mid,
             "reason": reason,
             "reason_v2": reason_v2,
-            "csrf": bili_jct,
         }
+        result = await self._request_cross_domain(
+            url, data=data,
+            referer=f"https://space.bilibili.com/{mid}/",
+            origin="https://space.bilibili.com",
+        )
+        if result.get("status") is True:
+            return {"code": 0, "message": result.get("data", "OK")}
+        return {"code": -1, "message": result.get("data", "Unknown error")}
 
-        # Build Cookie header manually for cross-subdomain request
+    async def _request_cross_domain(self, url: str, data: dict = None, referer: str = "", origin: str = "", retries: int = None):
+        """Request helper for cross-subdomain endpoints (e.g. space.bilibili.com) with retry logic."""
+        if retries is None: retries = MAX_RETRIES
+        if data is None: data = {}
+
+        account_name = self.auth.accounts[self.account_index]["name"]
+        bili_jct = self.cookies.get("bili_jct", "")
+        data["csrf"] = bili_jct
+
         cookie_parts = [f"{k}={v}" for k, v in self.cookies.items()]
         cookie_header = "; ".join(cookie_parts)
 
         headers = {
             "User-Agent": self._client.headers.get("User-Agent", ""),
-            "Referer": f"https://space.bilibili.com/{mid}/",
-            "Origin": "https://space.bilibili.com",
+            "Referer": referer,
+            "Origin": origin,
             "Accept": "*/*",
             "Content-Type": "application/x-www-form-urlencoded",
             "Cookie": cookie_header,
         }
 
-        account_name = self.auth.accounts[self.account_index]["name"]
-        try:
-            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as tmp_client:
-                resp = await tmp_client.post(url, data=data, headers=headers)
-            res_json = resp.json()
-        except Exception as e:
-            logger.error("[%s] report_user network error: %s", account_name, e)
-            res_json = {"status": False, "data": str(e)}
+        last_error = None
+        for attempt in range(retries):
+            try:
+                async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as tmp_client:
+                    resp = await tmp_client.post(url, data=data, headers=headers)
+                res_json = resp.json()
 
-        if res_json.get("status") is True:
-            return {"code": 0, "message": res_json.get("data", "OK")}
-        return {"code": -1, "message": res_json.get("data", "Unknown error")}
+                # Check for Bilibili error codes that warrant retry
+                code = res_json.get("code")
+                if code == -412:
+                    wait_time = 5 * (2 ** attempt) + random.uniform(0, 2)
+                    logger.warning("[%s] Rate limited (-412). Backoff %.1fs...", account_name, wait_time)
+                    await asyncio.sleep(wait_time)
+                    continue
+                if code == -352:
+                    wait_time = 300 + random.uniform(0, 60)
+                    logger.warning("[%s] Risk control (-352). Waiting %.0fs...", account_name, wait_time)
+                    await asyncio.sleep(wait_time)
+                    continue
+
+                return res_json
+            except (httpx.TimeoutException, httpx.ConnectError, httpx.ReadError) as e:
+                last_error = e
+                wait_time = (attempt + 1) * 2
+                logger.warning("[%s] Network error: %s. Retrying in %ds...", account_name, e, wait_time)
+                await asyncio.sleep(wait_time)
+        return {"status": False, "data": f"Max retries reached: {last_error or 'rate limits'}"}
 
     async def report_comment(self, oid: int, rpid: int, reason: int, content: str = "", type_code: int = 1, bvid: str = ""):
         """

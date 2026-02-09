@@ -1,5 +1,6 @@
 """Auto-reply business logic."""
 import asyncio
+import json
 
 from backend.database import execute_query, execute_insert
 from backend.logger import logger
@@ -10,6 +11,7 @@ ALLOWED_UPDATE_FIELDS = {"keyword", "response", "priority", "is_active"}
 # Global service state
 _autoreply_running = False
 _autoreply_task = None
+_last_poll_at = None
 
 
 # ── CRUD ──────────────────────────────────────────────────────────────────
@@ -63,6 +65,7 @@ async def get_status():
     return {
         "is_running": _autoreply_running,
         "active_accounts": accounts[0]["count"] if accounts else 0,
+        "last_poll_at": _last_poll_at,
     }
 
 
@@ -72,14 +75,33 @@ async def start_service(interval: int = 30):
     if _autoreply_running:
         return False  # already running
 
+    # Guard: check if scheduler already has an active autoreply_poll task
+    try:
+        from backend.services.scheduler_service import get_scheduler
+        scheduler = get_scheduler()
+        if scheduler.running:
+            for job in scheduler.get_jobs():
+                if job.name and 'autoreply' in job.name.lower():
+                    logger.warning(
+                        "Scheduler already has an active autoreply_poll job (%s). "
+                        "Refusing to start standalone autoreply service to avoid double-replies.",
+                        job.id,
+                    )
+                    return False
+    except Exception:
+        pass  # scheduler not initialized yet, safe to proceed
+
     _autoreply_running = True
 
     async def poll_loop():
+        global _last_poll_at
         from backend.core.bilibili_client import BilibiliClient
         from backend.core.bilibili_auth import BilibiliAuth
+        from datetime import datetime, timezone
 
         while _autoreply_running:
             try:
+                _last_poll_at = datetime.now(timezone.utc).isoformat()
                 accounts = await execute_query("SELECT * FROM accounts WHERE is_active = 1")
                 configs = await execute_query(
                     "SELECT * FROM autoreply_config WHERE is_active = 1 ORDER BY priority DESC"
@@ -122,7 +144,21 @@ async def start_service(interval: int = 30):
                                             break
 
                                     logger.info("[AutoReply][%s] Replying to %s: %s", account["name"], talker_id, reply_text)
-                                    await client.send_private_message(talker_id, reply_text)
+                                    send_result = await client.send_private_message(talker_id, reply_text)
+                                    send_success = send_result.get("code") == 0
+
+                                    # Log to report_logs for unified activity tracking
+                                    await execute_insert(
+                                        """INSERT INTO report_logs (target_id, account_id, action, request_data, response_data, success, error_message)
+                                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                                        (
+                                            None, account["id"], "autoreply",
+                                            json.dumps({"talker_id": talker_id, "reply": reply_text}),
+                                            json.dumps(send_result),
+                                            send_success,
+                                            None if send_success else send_result.get("message", "Unknown error"),
+                                        ),
+                                    )
 
                                     await execute_query(
                                         "INSERT INTO autoreply_state (account_id, talker_id, last_msg_ts) VALUES (?, ?, ?) "

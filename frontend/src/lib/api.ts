@@ -7,6 +7,7 @@ import type {
   AccountCreate,
   AutoReplyConfig,
   AutoReplyStatus,
+  CommentScanResult,
   ReportLog,
   ScheduledTask,
   TargetListResponse,
@@ -52,11 +53,14 @@ export const api = {
       const query = new URLSearchParams(params).toString();
       return request<TargetListResponse>(`/targets/?${query}`);
     },
-    create: (data: { type: string; identifier: string; reason_id?: number; reason_text?: string }) =>
+    create: (data: { type: string; identifier: string; reason_id?: number; reason_content_id?: number; reason_text?: string }) =>
       request<Target>("/targets/", { method: "POST", body: JSON.stringify(data) }),
-    createBatch: (data: { targets: Array<{ type: string; identifier: string }> }) =>
+    createBatch: (data: { type: string; identifiers: string[]; reason_id?: number; reason_content_id?: number; reason_text?: string }) =>
       request("/targets/batch", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: number, data: { reason_id?: number; reason_content_id?: number; reason_text?: string; status?: string }) =>
+      request<Target>(`/targets/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     delete: (id: number) => request(`/targets/${id}`, { method: "DELETE" }),
+    deleteByStatus: (status: string) => request(`/targets/?status=${status}`, { method: "DELETE" }),
   },
 
   // --- Reports ---
@@ -72,6 +76,8 @@ export const api = {
         body: JSON.stringify({ target_ids: targetIds, account_ids: accountIds }),
       }),
     getLogs: (limit: number = 50) => request<ReportLog[]>(`/reports/logs?limit=${limit}`),
+    scanComments: (data: { bvid: string; account_id: number; reason_id?: number; reason_text?: string; max_pages?: number; auto_report?: boolean }) =>
+      request<CommentScanResult>("/reports/scan-comments", { method: "POST", body: JSON.stringify(data) }),
   },
 
   // --- Auto-Reply ---
@@ -89,10 +95,10 @@ export const api = {
 
   // --- Config ---
   config: {
-    getAll: () => request<Record<string, any>>('/config/'),
-    get: (key: string) => request<{ key: string; value: any }>(`/config/${key}`),
-    update: (key: string, value: any) => request(`/config/${key}`, { method: 'PUT', body: JSON.stringify({ value }) }),
-    updateBatch: (configs: Record<string, any>) => request('/config/batch', { method: 'POST', body: JSON.stringify(configs) }),
+    getAll: () => request<Record<string, unknown>>('/config/'),
+    get: (key: string) => request<{ key: string; value: unknown }>(`/config/${key}`),
+    update: (key: string, value: unknown) => request(`/config/${key}`, { method: 'PUT', body: JSON.stringify({ value }) }),
+    updateBatch: (configs: Record<string, unknown>) => request('/config/batch', { method: 'POST', body: JSON.stringify(configs) }),
   },
 
   // --- Auth ---
@@ -115,6 +121,8 @@ export const api = {
     getTasks: () => request<ScheduledTask[]>("/scheduler/tasks"),
     createTask: (data: { name: string; task_type: string; cron_expression?: string; interval_seconds?: number }) =>
       request<ScheduledTask>("/scheduler/tasks", { method: "POST", body: JSON.stringify(data) }),
+    updateTask: (id: number, data: { name?: string; cron_expression?: string; interval_seconds?: number; config_json?: Record<string, unknown> }) =>
+      request<ScheduledTask>(`/scheduler/tasks/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     toggleTask: (id: number) => request(`/scheduler/tasks/${id}/toggle`, { method: "POST" }),
     deleteTask: (id: number) => request(`/scheduler/tasks/${id}`, { method: "DELETE" }),
     getHistory: (limit?: number) => request<ReportLog[]>(`/scheduler/history?limit=${limit || 50}`),

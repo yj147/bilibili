@@ -8,6 +8,12 @@ from backend.services import target_service
 router = APIRouter()
 
 
+@router.get("/export")
+async def export_targets(status: Optional[str] = None):
+    """Export targets list with optional status filter."""
+    return await target_service.export_targets(status)
+
+
 @router.get("/", response_model=TargetListResponse)
 async def list_targets(
     page: int = Query(1, ge=1),

@@ -95,7 +95,7 @@ async def test_csrf_double_set():
         
         client._client.post = mock_post
         
-        result = await client.report_user(mid=999, reason="test", reason_id=1)
+        result = await client.report_user(mid=999, reason_v2=4, reason=1)
         
         # csrf should be set and match bili_jct
         if captured_data.get("csrf") == "mock_bili_jct":
@@ -104,7 +104,7 @@ async def test_csrf_double_set():
             results.fail("CSRF token 正确传递", f"csrf={captured_data.get('csrf')}")
         
         # Verify all required fields present
-        required = {"mid", "reason", "content", "csrf"}
+        required = {"mid", "reason", "reason_v2", "csrf"}
         missing = required - set(captured_data.keys())
         if not missing:
             results.ok("report_user 字段完整")
@@ -330,7 +330,7 @@ async def test_concurrent_reports_isolation():
 
 @pytest.mark.asyncio
 async def test_report_user_field_semantics():
-    """report_user 的 data['reason'] 应该是 reason_id（整数），data['content'] 是文字原因。"""
+    """report_user 的 data['reason'] 和 data['reason_v2'] 应该是整数。"""
     auth = make_mock_auth()
     captured = {}
     
@@ -342,13 +342,13 @@ async def test_report_user_field_semantics():
             return resp
         
         client._client.post = mock_post
-        await client.report_user(mid=999, reason="违规内容", reason_id=3)
+        await client.report_user(mid=999, reason_v2=4, reason=3)
     
-    # reason 字段应该是 reason_id（整数），content 是文字
-    if captured.get("reason") == 3 and captured.get("content") == "违规内容":
-        results.ok("report_user reason/content 语义正确")
+    # reason 字段应该是整数, reason_v2 也是整数
+    if captured.get("reason") == 3 and captured.get("reason_v2") == 4:
+        results.ok("report_user reason/reason_v2 语义正确")
     else:
-        results.fail("report_user 字段语义", f"reason={captured.get('reason')} (应为3), content={captured.get('content')} (应为'违规内容')")
+        results.fail("report_user 字段语义", f"reason={captured.get('reason')} (应为3), reason_v2={captured.get('reason_v2')} (应为4)")
 
 
 # ===== Test 10: _execute_single_report 集成测试 =====

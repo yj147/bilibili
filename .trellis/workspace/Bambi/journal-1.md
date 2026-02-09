@@ -113,3 +113,64 @@
 ### Next Steps
 
 - None - task complete
+
+## Session 4: QR扫码登录前端集成 + Cookie可视化维护
+
+**Date**: 2026-02-09
+**Task**: QR扫码登录前端集成 + Cookie可视化维护
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 工作内容
+
+| 模块 | 变更 |
+|------|------|
+| QRLoginModal 组件 | 新建，状态机（loading/waiting/scanned/success/expired/error），qrcode.react 渲染，2s 轮询 |
+| Toast 组件 | 新建，4 种类型（warning/success/info/error），framer-motion 动画，auto-dismiss |
+| accounts 页面 | 重写：扫码登录按钮、Cookie 状态列、刷新按钮、Toast 提醒、空状态 CTA |
+| SWR useAccounts | 加 30s refreshInterval 自动轮询 |
+| auth_service.py | 新增 _fetch_buvid() 获取 buvid3/buvid4，覆盖新建+更新两条路径 |
+| auth_service.py | UA 改从 config.py 引用，logger 加 [Auth] 前缀 |
+| types.ts | 新增 QRGenerateResponse, QRPollResponse, CookieStatusResponse, CookieRefreshResponse |
+
+## Spec 更新
+
+- `frontend/hook-guidelines.md` — React 19 effect rules、useAccounts 30s、auth hooks
+- `frontend/component-guidelines.md` — Toast 模式（useRef 去重）、QR modal 状态机
+- `frontend/quality-guidelines.md` — cn() vs 模板字符串、Toast dedup
+- `backend/quality-guidelines.md` — buvid gotcha、cookie refresh 多步骤、auth_service 架构决策
+- `guides/cross-layer-thinking-guide.md` — QR 登录跨层 case study
+
+## 关键发现
+
+- React 19 禁止 useEffect 内同步 setState，需拆分 async fetch 和 button handler
+- buvid3/buvid4 不在 QR 登录返回中，须单独调 `/x/frontend/finger/spi`
+- 缺少 buvid 会导致 -352 风控或 -412 限流
+
+## 质量检查
+
+- Lint: 0 新增错误（9 预存）
+- TypeScript: 0 新增错误（2 预存）
+- 无 console.log / print / any
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4a289bd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

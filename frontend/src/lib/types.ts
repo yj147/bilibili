@@ -6,6 +6,9 @@ export interface Account {
   sessdata: string;
   bili_jct: string;
   buvid3: string;
+  buvid4?: string;
+  dedeuserid_ckmd5?: string;
+  refresh_token?: string;
   group_tag: string;
   is_active: boolean;
   last_check_at: string | null;
@@ -18,6 +21,9 @@ export interface AccountCreate {
   sessdata: string;
   bili_jct: string;
   buvid3?: string;
+  buvid4?: string;
+  dedeuserid_ckmd5?: string;
+  refresh_token?: string;
   group_tag?: string;
 }
 
@@ -39,6 +45,7 @@ export interface Target {
   identifier: string;
   aid: number | null;
   reason_id: number | null;
+  reason_content_id?: number | null;
   reason_text: string | null;
   status: TargetStatus;
   retry_count: number;
@@ -79,6 +86,7 @@ export interface AutoReplyConfig {
 export interface AutoReplyStatus {
   is_running: boolean;
   active_accounts: number;
+  last_poll_at?: string;
 }
 
 // Auth types
@@ -107,6 +115,22 @@ export interface CookieRefreshResponse {
 }
 
 // Scheduler types
+// Comment Scan types
+export interface CommentScanRequest {
+  bvid: string;
+  account_id: number;
+  reason_id?: number;
+  reason_text?: string;
+  max_pages?: number;
+  auto_report?: boolean;
+}
+
+export interface CommentScanResult {
+  comments_found: number;
+  targets_created: number;
+  reports_executed?: number;
+}
+
 export interface ScheduledTask {
   id: number;
   name: string;

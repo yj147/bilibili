@@ -13,9 +13,12 @@ import {
   QrCode,
   AlertTriangle,
   Cookie,
+  Pencil,
+  X,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAccounts } from "@/lib/swr";
+import type { Account } from "@/lib/types";
 import QRLoginModal from "@/components/QRLoginModal";
 import ToastContainer, { ToastItem, createToast } from "@/components/Toast";
 
@@ -24,6 +27,8 @@ export default function AccountsPage() {
   const loading = isLoading;
   const [showAddModal, setShowAddModal] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkingId, setCheckingId] = useState<number | null>(null);
   const [refreshingId, setRefreshingId] = useState<number | null>(null);
@@ -59,6 +64,16 @@ export default function AccountsPage() {
     group_tag: "default",
   });
 
+  const [editFormData, setEditFormData] = useState({
+    name: "",
+    sessdata: "",
+    bili_jct: "",
+    buvid3: "",
+    buvid4: "",
+    group_tag: "default",
+    is_active: true,
+  });
+
   const handleAddAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -67,8 +82,40 @@ export default function AccountsPage() {
       setShowAddModal(false);
       setFormData({ name: "", sessdata: "", bili_jct: "", buvid3: "", group_tag: "default" });
       mutate();
+      addToast("success", "账号添加成功");
     } catch {
-      alert("添加失败，请检查填写内容");
+      addToast("error", "添加失败，请检查填写内容");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleEdit = (acc: Account) => {
+    setEditingAccount(acc);
+    setEditFormData({
+      name: acc.name,
+      sessdata: acc.sessdata,
+      bili_jct: acc.bili_jct,
+      buvid3: acc.buvid3 || "",
+      buvid4: acc.buvid4 || "",
+      group_tag: acc.group_tag || "default",
+      is_active: acc.is_active,
+    });
+    setShowEditModal(true);
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAccount) return;
+    setIsSubmitting(true);
+    try {
+      await api.accounts.update(editingAccount.id, editFormData);
+      setShowEditModal(false);
+      setEditingAccount(null);
+      mutate();
+      addToast("success", "账号更新成功");
+    } catch {
+      addToast("error", "更新失败");
     } finally {
       setIsSubmitting(false);
     }
@@ -79,8 +126,10 @@ export default function AccountsPage() {
     try {
       await api.accounts.check(id);
       mutate();
+      addToast("success", "检测完成");
     } catch (err) {
       console.error("Check failed", err);
+      addToast("error", "检测失败");
     } finally {
       setCheckingId(null);
     }
@@ -92,11 +141,12 @@ export default function AccountsPage() {
       const result = await api.auth.refreshCookies(id);
       if (result.success) {
         mutate();
+        addToast("success", "Cookie 刷新成功");
       } else {
-        alert(result.message || "Cookie 刷新失败");
+        addToast("error", result.message || "Cookie 刷新失败");
       }
     } catch {
-      alert("Cookie 刷新请求失败");
+      addToast("error", "Cookie 刷新请求失败");
     } finally {
       setRefreshingId(null);
     }
@@ -107,8 +157,10 @@ export default function AccountsPage() {
     try {
       await api.accounts.delete(id);
       mutate();
+      addToast("success", "账号已移除");
     } catch (err) {
       console.error("Delete failed", err);
+      addToast("error", "删除失败");
     }
   };
 
@@ -214,7 +266,14 @@ export default function AccountsPage() {
                       {acc.last_check_at ? new Date(acc.last_check_at).toLocaleString() : "从不"}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex justify-end gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => handleEdit(acc)}
+                          title="编辑账号"
+                          className="p-2 hover:bg-white/10 rounded-lg text-white/40 hover:text-orange-400 transition-colors cursor-pointer"
+                        >
+                          <Pencil size={16} />
+                        </button>
                         <button
                           onClick={() => handleCheck(acc.id)}
                           disabled={checkingId === acc.id}
@@ -329,6 +388,112 @@ export default function AccountsPage() {
                 className="w-full bg-blue-600 py-4 rounded-xl font-bold hover:bg-blue-500 transition-all shadow-[0_0_30px_rgba(37,99,235,0.4)] mt-4 flex items-center justify-center gap-2 cursor-pointer"
               >
                 {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : "立即接入哨兵矩阵"}
+              </button>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Edit account modal */}
+      {showEditModal && editingAccount && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            onClick={() => setShowEditModal(false)}
+            className="absolute inset-0 bg-black/80 backdrop-blur-md"
+          />
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="glass-card w-full max-w-xl rounded-3xl p-8 relative z-10 border-white/10 shadow-2xl"
+          >
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold flex items-center gap-3">
+                <Pencil className="text-orange-400" /> 编辑账号
+              </h2>
+              <button onClick={() => setShowEditModal(false)}><X size={20} className="text-white/40" /></button>
+            </div>
+            <form onSubmit={handleEditSubmit} className="space-y-5">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs text-white/40 ml-1">账号别名</label>
+                  <input
+                    type="text"
+                    value={editFormData.name}
+                    onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-orange-500 outline-none transition-colors"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-white/40 ml-1">账号分组</label>
+                  <select
+                    value={editFormData.group_tag}
+                    onChange={(e) => setEditFormData({ ...editFormData, group_tag: e.target.value })}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-orange-500 outline-none transition-colors appearance-none"
+                  >
+                    <option value="default" className="bg-zinc-900">默认组</option>
+                    <option value="report" className="bg-zinc-900">举报组</option>
+                    <option value="reply" className="bg-zinc-900">回复组</option>
+                  </select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs text-white/40 ml-1">SESSDATA</label>
+                <textarea
+                  value={editFormData.sessdata}
+                  onChange={(e) => setEditFormData({ ...editFormData, sessdata: e.target.value })}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-orange-500 outline-none transition-colors h-20 resize-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs text-white/40 ml-1">bili_jct (CSRF)</label>
+                  <input
+                    type="text"
+                    value={editFormData.bili_jct}
+                    onChange={(e) => setEditFormData({ ...editFormData, bili_jct: e.target.value })}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-orange-500 outline-none transition-colors"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-white/40 ml-1">buvid3</label>
+                  <input
+                    type="text"
+                    value={editFormData.buvid3}
+                    onChange={(e) => setEditFormData({ ...editFormData, buvid3: e.target.value })}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-orange-500 outline-none transition-colors"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs text-white/40 ml-1">buvid4</label>
+                  <input
+                    type="text"
+                    value={editFormData.buvid4}
+                    onChange={(e) => setEditFormData({ ...editFormData, buvid4: e.target.value })}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-orange-500 outline-none transition-colors"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-white/40 ml-1">状态</label>
+                  <button
+                    type="button"
+                    onClick={() => setEditFormData({ ...editFormData, is_active: !editFormData.is_active })}
+                    className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-colors ${
+                      editFormData.is_active ? 'bg-green-600/20 text-green-400 border border-green-500/30' : 'bg-red-600/20 text-red-400 border border-red-500/30'
+                    }`}
+                  >
+                    {editFormData.is_active ? "启用中" : "已禁用"}
+                  </button>
+                </div>
+              </div>
+              <button
+                disabled={isSubmitting}
+                className="w-full bg-orange-600 py-4 rounded-xl font-bold hover:bg-orange-500 transition-all shadow-[0_0_30px_rgba(234,88,12,0.3)] mt-2 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : "保存更改"}
               </button>
             </form>
           </motion.div>

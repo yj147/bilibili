@@ -49,6 +49,43 @@ async def get_active_accounts():
     return await execute_query("SELECT * FROM accounts WHERE is_active = 1")
 
 
+async def export_accounts(include_credentials: bool = False):
+    """Export all accounts. Optionally include sensitive credential fields."""
+    rows = await execute_query("SELECT * FROM accounts ORDER BY created_at DESC")
+    if not include_credentials:
+        sensitive = {"sessdata", "bili_jct", "refresh_token", "dedeuserid_ckmd5"}
+        rows = [{k: v for k, v in row.items() if k not in sensitive} for row in rows]
+    return rows
+
+
+async def import_accounts(accounts_data: list[dict]) -> dict:
+    """Batch import accounts from JSON array. Returns count of created/skipped."""
+    created = 0
+    skipped = 0
+    for acc in accounts_data:
+        name = acc.get("name")
+        sessdata = acc.get("sessdata")
+        bili_jct = acc.get("bili_jct")
+        if not name or not sessdata or not bili_jct:
+            skipped += 1
+            continue
+        try:
+            await create_account(
+                name=name,
+                sessdata=sessdata,
+                bili_jct=bili_jct,
+                buvid3=acc.get("buvid3", ""),
+                buvid4=acc.get("buvid4", ""),
+                dedeuserid_ckmd5=acc.get("dedeuserid_ckmd5", ""),
+                group_tag=acc.get("group_tag", "default"),
+            )
+            created += 1
+        except Exception as e:
+            logger.warning("Import account '%s' failed: %s", name, e)
+            skipped += 1
+    return {"created": created, "skipped": skipped, "total": len(accounts_data)}
+
+
 async def check_account_validity(account_id: int):
     import httpx
     rows = await execute_query("SELECT * FROM accounts WHERE id = ?", (account_id,))

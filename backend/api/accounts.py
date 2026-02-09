@@ -1,10 +1,22 @@
 """Account Management API Routes"""
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from typing import List
 from backend.models.account import Account, AccountCreate, AccountUpdate, AccountStatus
 from backend.services import account_service
 
 router = APIRouter()
+
+
+@router.get("/export")
+async def export_accounts(include_credentials: bool = Query(False)):
+    """Export all accounts as JSON."""
+    return await account_service.export_accounts(include_credentials)
+
+
+@router.post("/import")
+async def import_accounts(accounts: List[dict]):
+    """Batch import accounts from JSON array."""
+    return await account_service.import_accounts(accounts)
 
 @router.get("/", response_model=List[Account])
 async def list_accounts():

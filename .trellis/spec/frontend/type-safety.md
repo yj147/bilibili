@@ -30,7 +30,7 @@
 ## Keeping Types in Sync
 
 When backend schema changes:
-1. Update Pydantic schema in `backend/schemas/`
+1. Update Pydantic schema in `backend/models/`
 2. Mirror change in `frontend/src/lib/types.ts`
 3. TypeScript compiler flags mismatches
 

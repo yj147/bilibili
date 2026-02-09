@@ -178,7 +178,7 @@ logger.info(f"Target {target_id} status: {status}")
 - [ ] BilibiliClient used with `async with`
 - [ ] Dynamic UPDATE uses field whitelist
 - [ ] Anti-detection delays between Bilibili API calls
-- [ ] New schemas in `schemas/` (not `models/`)
+- [ ] New schemas in `models/` with request/response separation
 - [ ] Constants defined once in `config.py`, not duplicated
 - [ ] Schema changes: existing DBs need `ALTER TABLE` migration
 - [ ] All `print()` in non-test code replaced with `logger`

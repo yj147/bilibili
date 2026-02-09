@@ -1,7 +1,7 @@
 "use client";
 
-import React from "react";
-import { motion } from "framer-motion";
+import React, { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Users,
   ShieldCheck,
@@ -10,40 +10,68 @@ import {
   Target,
   RefreshCw,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { useAccounts, useTargets, useReportLogs } from "@/lib/swr";
 import { useLogStream } from "@/lib/websocket";
 import BentoCard from "@/components/BentoCard";
 import StatItem from "@/components/StatItem";
 
+/** Build an array of daily report counts for the last 7 days from log entries. */
+function buildLast7DayCounts(logs: { executed_at: string; success: boolean }[]): { counts: number[]; labels: string[] } {
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const now = new Date();
+  const counts: number[] = [];
+  const labels: string[] = [];
+
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().slice(0, 10);
+    labels.push(dayNames[d.getDay()]);
+    counts.push(logs.filter((l) => l.executed_at.slice(0, 10) === dateStr).length);
+  }
+  return { counts, labels };
+}
+
 export default function Dashboard() {
   const { data: accounts = [], mutate: mutateAccounts } = useAccounts();
   const { data: targetData } = useTargets();
-  const { data: apiLogs = [] } = useReportLogs(15);
+  const { data: apiLogs = [] } = useReportLogs(500);
   const { logs: wsLogs, connected: wsConnected } = useLogStream(50);
   const loading = !accounts;
+  const [expandedLogId, setExpandedLogId] = useState<number | null>(null);
 
   // Merge WS logs (real-time) with API logs (historical), WS first
   const wsAsReportLogs = wsLogs.map((entry, i) => ({
     id: -(i + 1),
-    target_id: entry.data?.target_id ?? 0,
-    account_id: entry.data?.account_id ?? null,
-    account_name: entry.data?.account_name ?? 'system',
+    target_id: Number(entry.data?.target_id ?? 0),
+    account_id: entry.data?.account_id != null ? Number(entry.data.account_id) : null,
+    account_name: String(entry.data?.account_name ?? 'system'),
     action: entry.message || entry.type,
-    request_data: null,
-    response_data: null,
+    request_data: null as Record<string, unknown> | null,
+    response_data: null as Record<string, unknown> | null,
     success: entry.type !== 'error',
     error_message: entry.type === 'error' ? entry.message : null,
     executed_at: new Date(entry.timestamp).toISOString(),
   }));
   const logs = [...wsAsReportLogs, ...apiLogs.filter(al => !wsAsReportLogs.some(wl => wl.action === al.action && Math.abs(new Date(wl.executed_at).getTime() - new Date(al.executed_at).getTime()) < 2000))].slice(0, 50);
 
+  // Bar chart: last 7 days of report activity
+  const { counts: dailyCounts, labels: dayLabels } = buildLast7DayCounts(apiLogs);
+  const maxCount = Math.max(...dailyCounts, 1);
+
+  // Today's execution: only logs whose executed_at matches today's date
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayCount = apiLogs.filter((l) => l.success && l.executed_at.slice(0, 10) === todayStr).length;
+
   const activeCount = accounts.filter((a) => a.status === "valid").length;
   const health = accounts.length > 0 ? Math.round((activeCount / accounts.length) * 100) : 0;
   const stats = {
     accounts: accounts.length,
     targets: targetData?.total ?? 0,
-    logs: logs.filter((l) => l.success).length,
+    logs: todayCount,
     health,
   };
 
@@ -96,17 +124,21 @@ export default function Dashboard() {
             />
           </div>
           <div className="mt-8 h-[60px] flex items-end gap-1">
-            {[40, 70, 45, 90, 65, 80, 50, 95, 75, 60, 85, 40, 55, 70].map(
-              (h, i) => (
+            {dailyCounts.map((count, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-1">
                 <motion.div
-                  key={i}
                   initial={{ height: 0 }}
-                  animate={{ height: `${h}%` }}
-                  transition={{ delay: i * 0.05, duration: 0.5 }}
-                  className="flex-1 bg-gradient-to-t from-blue-600/50 to-blue-400 rounded-sm"
+                  animate={{ height: `${maxCount > 0 ? (count / maxCount) * 100 : 0}%` }}
+                  transition={{ delay: i * 0.08, duration: 0.5 }}
+                  className="w-full bg-gradient-to-t from-blue-600/50 to-blue-400 rounded-sm min-h-[2px]"
                 />
-              )
-            )}
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-1 mt-1">
+            {dayLabels.map((label, i) => (
+              <div key={i} className="flex-1 text-center text-[8px] text-white/30">{label}</div>
+            ))}
           </div>
         </BentoCard>
 
@@ -203,21 +235,57 @@ export default function Dashboard() {
               <div className="text-white/20 italic">等待任务下发中...</div>
             ) : (
               logs.map((log) => (
-                <div
-                  key={log.id}
-                  className="mb-2 flex gap-3 border-b border-white/5 pb-1 last:border-none"
-                >
-                  <span className="text-white/30 shrink-0">
-                    [{new Date(log.executed_at).toLocaleTimeString()}]
-                  </span>
-                  <span
-                    className={log.success ? "text-green-400" : "text-red-400"}
+                <div key={log.id}>
+                  <div
+                    className="mb-1 flex gap-3 border-b border-white/5 pb-1 last:border-none cursor-pointer hover:bg-white/5 rounded px-1 -mx-1"
+                    onClick={() => setExpandedLogId(expandedLogId === log.id ? null : log.id)}
                   >
-                    Account [{log.account_name}] executed {log.action}
-                    {log.success
-                      ? "... SUCCESS"
-                      : `... FAILED: ${log.error_message}`}
-                  </span>
+                    <span className="text-white/30 shrink-0">
+                      [{new Date(log.executed_at).toLocaleTimeString()}]
+                    </span>
+                    <span
+                      className={`flex-1 ${log.success ? "text-green-400" : "text-red-400"}`}
+                    >
+                      Account [{log.account_name}] executed {log.action}
+                      {log.success
+                        ? "... SUCCESS"
+                        : `... FAILED: ${log.error_message}`}
+                    </span>
+                    {(log.request_data || log.response_data) && (
+                      <span className="text-white/20 shrink-0">
+                        {expandedLogId === log.id ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                      </span>
+                    )}
+                  </div>
+                  <AnimatePresence>
+                    {expandedLogId === log.id && (log.request_data || log.response_data) && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="overflow-hidden mb-2"
+                      >
+                        <div className="bg-white/5 rounded-lg p-3 ml-6 space-y-2">
+                          {log.request_data && (
+                            <div>
+                              <span className="text-blue-400/60">Request:</span>
+                              <pre className="text-white/40 text-[9px] mt-1 whitespace-pre-wrap break-all">
+                                {JSON.stringify(log.request_data, null, 2)}
+                              </pre>
+                            </div>
+                          )}
+                          {log.response_data && (
+                            <div>
+                              <span className="text-purple-400/60">Response:</span>
+                              <pre className="text-white/40 text-[9px] mt-1 whitespace-pre-wrap break-all">
+                                {JSON.stringify(log.response_data, null, 2)}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               ))
             )}
