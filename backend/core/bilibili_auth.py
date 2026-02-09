@@ -49,6 +49,10 @@ class BilibiliAuth:
             }
             if acc.get("buvid4"):
                 cookies["buvid4"] = acc["buvid4"]
+            if acc.get("uid"):
+                cookies["DedeUserID"] = str(acc["uid"])
+            if acc.get("dedeuserid_ckmd5"):
+                cookies["DedeUserID__ckMd5"] = acc["dedeuserid_ckmd5"]
             return cookies
         return {}
 
@@ -118,6 +122,7 @@ class BilibiliAuth:
             "bili_jct": account_dict.get("bili_jct", ""),
             "buvid3": account_dict.get("buvid3", ""),
             "buvid4": account_dict.get("buvid4", ""),
+            "dedeuserid_ckmd5": account_dict.get("dedeuserid_ckmd5", ""),
             "uid": account_dict.get("uid", 0),
         }]
         instance.wbi_keys = wbi_keys or {"img_key": "", "sub_key": ""}

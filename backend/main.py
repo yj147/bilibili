@@ -9,7 +9,7 @@ from backend.database import init_db, close_db
 from backend.logger import logger
 from backend.middleware import register_exception_handlers
 from backend.auth import verify_api_key
-from backend.api import accounts, targets, reports, autoreply, scheduler, websocket, config
+from backend.api import accounts, targets, reports, autoreply, scheduler, websocket, config, auth
 
 
 @asynccontextmanager
@@ -74,6 +74,7 @@ app.include_router(autoreply.router, prefix="/api/autoreply", tags=["Auto-Reply"
 app.include_router(scheduler.router, prefix="/api/scheduler", tags=["Scheduler"])
 app.include_router(websocket.router, tags=["WebSocket"])
 app.include_router(config.router, prefix="/api/config", tags=["Config"])
+app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 
 
 @app.get("/")

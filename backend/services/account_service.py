@@ -2,7 +2,7 @@
 from backend.database import execute_query, execute_insert
 from backend.logger import logger
 
-ALLOWED_UPDATE_FIELDS = {"name", "sessdata", "bili_jct", "buvid3", "buvid4", "group_tag", "is_active"}
+ALLOWED_UPDATE_FIELDS = {"name", "sessdata", "bili_jct", "buvid3", "buvid4", "dedeuserid_ckmd5", "refresh_token", "group_tag", "is_active"}
 
 
 async def list_accounts():
@@ -14,10 +14,10 @@ async def get_account(account_id: int):
     return rows[0] if rows else None
 
 
-async def create_account(name, sessdata, bili_jct, buvid3="", buvid4="", group_tag="default"):
+async def create_account(name, sessdata, bili_jct, buvid3="", buvid4="", dedeuserid_ckmd5="", group_tag="default"):
     account_id = await execute_insert(
-        "INSERT INTO accounts (name, sessdata, bili_jct, buvid3, buvid4, group_tag) VALUES (?, ?, ?, ?, ?, ?)",
-        (name, sessdata, bili_jct, buvid3, buvid4, group_tag)
+        "INSERT INTO accounts (name, sessdata, bili_jct, buvid3, buvid4, dedeuserid_ckmd5, group_tag) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (name, sessdata, bili_jct, buvid3, buvid4, dedeuserid_ckmd5, group_tag)
     )
     rows = await execute_query("SELECT * FROM accounts WHERE id = ?", (account_id,))
     return rows[0]

@@ -12,7 +12,7 @@ const fetcher = (path: string) => fetch(`${API_BASE}${path}`, {
 });
 
 export function useAccounts() {
-  return useSWR<Account[]>('/accounts/', fetcher);
+  return useSWR<Account[]>('/accounts/', fetcher, { refreshInterval: 30000 });
 }
 
 export function useTargets(params: Record<string, string> = {}) {

@@ -11,6 +11,8 @@ class AccountCreate(BaseModel):
     sessdata: str
     bili_jct: str
     buvid3: Optional[str] = ""
+    dedeuserid_ckmd5: Optional[str] = ""
+    refresh_token: Optional[str] = ""
     group_tag: Optional[str] = "default"
 
 
@@ -19,6 +21,8 @@ class AccountUpdate(BaseModel):
     sessdata: Optional[str] = None
     bili_jct: Optional[str] = None
     buvid3: Optional[str] = None
+    dedeuserid_ckmd5: Optional[str] = None
+    refresh_token: Optional[str] = None
     group_tag: Optional[str] = None
     is_active: Optional[bool] = None
 
@@ -31,6 +35,8 @@ class AccountResponse(BaseModel):
     sessdata: str
     bili_jct: str
     buvid3: Optional[str] = ""
+    dedeuserid_ckmd5: Optional[str] = ""
+    refresh_token: Optional[str] = ""
     group_tag: Optional[str] = "default"
     uid: Optional[int] = None
     is_active: bool = True

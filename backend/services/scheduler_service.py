@@ -32,6 +32,18 @@ async def start_scheduler():
         _register_job(row)
     logger.info("Loaded %d scheduled tasks", len(rows))
 
+    # Built-in: cookie health check every 6 hours
+    existing = await execute_query(
+        "SELECT id FROM scheduled_tasks WHERE task_type = 'cookie_health_check' LIMIT 1"
+    )
+    if not existing:
+        await create_task(
+            name="Cookie Health Check",
+            task_type="cookie_health_check",
+            interval_seconds=21600,
+        )
+        logger.info("Created built-in cookie health check task (every 6h)")
+
 
 def stop_scheduler():
     """Stop the APScheduler."""
@@ -128,7 +140,43 @@ async def _run_autoreply_poll(task_id: int):
     )
 
 
-_JOB_FUNCTIONS = {"report_batch": _run_report_batch, "autoreply_poll": _run_autoreply_poll}
+
+
+async def _run_cookie_health_check(task_id: int):
+    """Job function: check all active accounts' cookie health and auto-refresh if needed."""
+    from backend.services.auth_service import check_cookie_refresh_needed, refresh_account_cookies
+    from backend.api.websocket import broadcast_log
+
+    accounts = await execute_query("SELECT * FROM accounts WHERE is_active = 1")
+    for account in accounts:
+        try:
+            status = await check_cookie_refresh_needed(account["id"])
+            if status.get("needs_refresh"):
+                reason = status.get("reason", "unknown")
+                await broadcast_log("auth", f"[{account['name']}] Cookie refresh needed ({reason})")
+                if account.get("refresh_token"):
+                    result = await refresh_account_cookies(account["id"])
+                    if result.get("success"):
+                        await broadcast_log("auth", f"[{account['name']}] Cookie refreshed successfully")
+                    else:
+                        await broadcast_log("auth", f"[{account['name']}] Cookie refresh failed: {result.get('message')}")
+                        await execute_query(
+                            "UPDATE accounts SET status = 'expiring' WHERE id = ?",
+                            (account["id"],),
+                        )
+                else:
+                    await broadcast_log("auth", f"[{account['name']}] No refresh_token. QR re-login required.")
+                    await execute_query(
+                        "UPDATE accounts SET status = 'expiring' WHERE id = ?",
+                        (account["id"],),
+                    )
+        except Exception as e:
+            logger.error("[Cookie Health][%s] Error: %s", account.get("name", "?"), e)
+    await execute_query(
+        "UPDATE scheduled_tasks SET last_run_at = datetime('now') WHERE id = ?", (task_id,)
+    )
+
+_JOB_FUNCTIONS = {"report_batch": _run_report_batch, "autoreply_poll": _run_autoreply_poll, "cookie_health_check": _run_cookie_health_check}
 
 
 # ── Job registration ──────────────────────────────────────────────────────

@@ -69,3 +69,54 @@ import { cn } from "@/lib/utils";
 1. **Forgetting "use client"** — SWR hooks require it
 2. **Modifying shadcn/ui files directly** — customize via className props
 3. **Using Server Components for interactive pages** — all feature pages are client components
+
+---
+
+## Toast Notification Pattern
+
+Use `Toast` component (`components/Toast.tsx`) for transient user notifications:
+
+```tsx
+import { createToast, ToastContainer } from "@/components/Toast";
+
+const [toasts, setToasts] = useState<Toast[]>([]);
+createToast(setToasts, "warning", "账号 Cookie 即将过期");
+
+<ToastContainer toasts={toasts} onDismiss={(id) => setToasts(t => t.filter(x => x.id !== id))} />
+```
+
+### Toast Deduplication via useRef
+
+Prevent duplicate toasts on SWR re-render using a `Set` ref:
+
+```tsx
+const notifiedRef = useRef(new Set<number>());
+
+useEffect(() => {
+  accounts?.forEach(acc => {
+    if (acc.status === "expiring" && !notifiedRef.current.has(acc.id)) {
+      notifiedRef.current.add(acc.id);
+      createToast(setToasts, "warning", `账号 ${acc.name} Cookie 即将过期`);
+    }
+  });
+}, [accounts]);
+```
+
+**Why**: SWR triggers re-renders on revalidation. Without dedup, the same toast fires repeatedly.
+
+---
+
+## QR Login Modal Pattern
+
+QR login is a multi-step flow with state machine:
+
+| State | Display |
+|-------|--------|
+| `loading` | Spinner |
+| `waiting` | QR code image |
+| `scanned` | "已扫码，请确认" |
+| `success` | Green checkmark, auto-close |
+| `expired` | "已过期" + refresh button |
+| `error` | Error message + retry |
+
+**Key**: The modal is conditionally rendered (not hidden via CSS), so mount/unmount triggers cleanup of polling intervals.

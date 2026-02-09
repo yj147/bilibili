@@ -182,3 +182,48 @@ logger.info(f"Target {target_id} status: {status}")
 - [ ] Constants defined once in `config.py`, not duplicated
 - [ ] Schema changes: existing DBs need `ALTER TABLE` migration
 - [ ] All `print()` in non-test code replaced with `logger`
+
+---
+
+## Bilibili Auth Gotchas
+
+### Gotcha: buvid3/buvid4 Must Be Fetched After QR Login
+
+QR login only returns `SESSDATA`, `bili_jct`, `DedeUserID`, `refresh_token`. The `buvid3`/`buvid4` cookies must be fetched separately via:
+
+```
+GET https://api.bilibili.com/x/frontend/finger/spi
+```
+
+Response:
+```json
+{"code": 0, "data": {"b_3": "buvid3_value", "b_4": "buvid4_value"}}
+```
+
+**Implementation**: Call `_fetch_buvid(sessdata, bili_jct)` in `auth_service.py` after QR login success, for both new and existing accounts.
+
+**Why**: Without buvid, many Bilibili API calls return -352 (risk control) or -412 (rate limit).
+
+### Gotcha: Cookie Refresh is Multi-Step
+
+Cookie refresh is not a single API call. The full flow:
+1. Generate `correspondPath` via `/x/web-interface/nav`
+2. Call `/passport/login/refresh` with `refresh_token` + `correspondPath`
+3. Confirm new token via `/passport/login/refresh/confirm`
+4. Revoke old refresh token
+5. Update all 6 cookie fields in DB
+
+Each step can fail independently. The service must handle partial failures gracefully.
+
+---
+
+## Architectural Decisions
+
+### auth_service Uses Raw httpx (Not BilibiliClient)
+
+`auth_service.py` deliberately uses `httpx.AsyncClient` directly instead of `BilibiliClient` because:
+- Passport endpoints (`passport.bilibili.com`) don't require WBI signing
+- `BilibiliClient` requires an account index, but auth operations happen before/without an account
+- The SPI endpoint for buvid fetching also doesn't need WBI
+
+This is an intentional exception to the "use BilibiliClient for Bilibili API" pattern.

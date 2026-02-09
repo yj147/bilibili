@@ -92,3 +92,29 @@ Create detailed flow docs when:
 - Multiple teams are involved
 - Data format is complex
 - Feature has caused bugs before
+
+---
+
+## Case Study: QR Login Flow (Cross-Layer)
+
+This feature spans 4 layers:
+
+```
+QRLoginModal (Frontend) → Next.js API Proxy → FastAPI Router → auth_service → Bilibili API
+```
+
+### Data Flow
+
+| Step | Frontend | Backend | Bilibili |
+|------|----------|---------|----------|
+| 1. Generate | `api.auth.qrGenerate()` | `POST /api/auth/qr/generate` | `passport.bilibili.com/x/passport-login/web/qrcode/generate` |
+| 2. Poll | `api.auth.qrPoll(key)` every 2s | `GET /api/auth/qr/poll?qrcode_key=X` | `passport.bilibili.com/x/passport-login/web/qrcode/poll` |
+| 3. Save | `api.auth.qrLogin(key)` | `POST /api/auth/qr/login` | Internal: parse cookies + fetch buvid |
+| 4. Status | `api.auth.cookieStatus(id)` | `GET /api/auth/cookie-status/{id}` | `passport.bilibili.com/x/passport-login/web/cookie/info` |
+
+### Gotchas at Boundaries
+
+1. **Bilibili → Backend**: QR poll returns status codes (86101=waiting, 86090=scanned, 86038=expired, 0=success) — NOT HTTP status codes
+2. **Backend → Frontend**: These are mapped to a `status` string field in the response schema
+3. **Frontend timing**: Poll interval must be >=2s to avoid Bilibili rate limiting
+4. **Post-login**: buvid3/buvid4 require a separate API call after saving the session

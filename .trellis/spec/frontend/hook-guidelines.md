@@ -40,7 +40,7 @@ export function useTargets(params: Record<string, string> = {}) {
 
 | Hook | Returns | Refresh |
 |------|---------|--------|
-| `useAccounts()` | `Account[]` | On focus |
+| `useAccounts()` | `Account[]` | Every 30s |
 | `useTargets(params)` | `TargetListResponse` | On focus |
 | `useReportLogs(limit)` | `ReportLog[]` | On focus |
 | `useAutoReplyConfigs()` | `AutoReplyConfig[]` | On focus |
@@ -166,3 +166,85 @@ SWR returns `undefined` before first load:
 ```typescript
 const { data: accounts = [] } = useAccounts(); // Default to empty array
 ```
+
+---
+
+## React 19 Effect Rules (Critical)
+
+React 19 enforces strict lint rules via `react-hooks/set-state-in-effect`. Violations will block lint.
+
+### Forbidden: Synchronous setState in useEffect
+
+```typescript
+// FORBIDDEN — triggers cascading render lint error
+useEffect(() => {
+  if (data) setLocalState(data);  // sync setState in effect body
+}, [data]);
+```
+
+### Pattern: Async Function Inside Effect
+
+If the setState is after an `await`, it's allowed because it's in a microtask:
+
+```typescript
+// ALLOWED — setState is after await (async callback)
+useEffect(() => {
+  const load = async () => {
+    const res = await api.auth.qrGenerate();
+    setQrUrl(res.url);  // OK: after await
+  };
+  load();
+}, []);
+```
+
+### Pattern: Ref Stability for Callbacks
+
+Don't assign refs during render. Use a separate effect:
+
+```typescript
+// FORBIDDEN — ref assignment during render
+const callbackRef = useRef(callback);
+callbackRef.current = callback;  // Lint error: ref access during render
+
+// ALLOWED — ref assignment inside effect
+const callbackRef = useRef(callback);
+useEffect(() => {
+  callbackRef.current = callback;
+});
+```
+
+### Pattern: Split Event Handler vs Effect Logic
+
+Separate async-only logic (for effects) from sync+async logic (for button handlers):
+
+```typescript
+// For useEffect mount — async only, no sync setState
+const fetchData = async () => {
+  const res = await api.getData();
+  setState(res);  // OK: after await
+};
+
+// For button click — can do anything
+const handleRefresh = () => {
+  setLoading(true);  // sync setState OK in event handler
+  fetchData();
+};
+
+useEffect(() => { fetchData(); }, []);  // Mount
+```
+
+---
+
+## Auth Hooks (`lib/api.ts` auth namespace)
+
+Auth operations use the `api.auth` namespace directly (not SWR hooks), because they are imperative actions:
+
+```typescript
+api.auth.qrGenerate()     // Generate QR code URL + qrcode_key
+api.auth.qrPoll(key)      // Poll QR scan status
+api.auth.qrLogin(key)     // Save scanned session to DB
+api.auth.cookieStatus(id) // Check cookie health
+api.auth.refreshCookies(id) // Silent cookie refresh
+```
+
+These are NOT cached via SWR — they are one-shot mutations/queries.

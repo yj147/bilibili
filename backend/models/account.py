@@ -12,6 +12,8 @@ class AccountBase(BaseModel):
     bili_jct: str
     buvid3: Optional[str] = ""
     buvid4: Optional[str] = ""
+    dedeuserid_ckmd5: Optional[str] = ""
+    refresh_token: Optional[str] = ""
     group_tag: Optional[str] = "default"
 
 
@@ -25,6 +27,8 @@ class AccountUpdate(BaseModel):
     bili_jct: Optional[str] = None
     buvid3: Optional[str] = None
     buvid4: Optional[str] = None
+    dedeuserid_ckmd5: Optional[str] = None
+    refresh_token: Optional[str] = None
     group_tag: Optional[str] = None
     is_active: Optional[bool] = None
 

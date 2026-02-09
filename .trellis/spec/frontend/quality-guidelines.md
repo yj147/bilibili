@@ -66,3 +66,38 @@ npm run lint      # ESLint
 - [ ] Default values for SWR data
 - [ ] Chinese text for UI labels
 - [ ] Types match backend schemas
+
+---
+
+## Styling Conventions Clarification
+
+### cn() vs Template Literals
+
+- **Use `cn()`** when combining multiple conditional classes or merging Tailwind classes that may conflict
+- **Template literals are acceptable** for simple, single-condition toggles:
+
+```tsx
+// cn() — multiple conditionals or class conflicts
+<div className={cn("base", isActive && "bg-green-500", isError && "bg-red-500")} />
+
+// Template literal — simple single toggle (acceptable)
+<div className={`w-2 h-2 rounded-full ${isActive ? 'bg-green-500' : 'bg-red-500'}`} />
+```
+
+### Toast Dedup Pattern (useRef + Set)
+
+When SWR polling causes re-renders, use `useRef<Set>` to prevent duplicate side effects:
+
+```tsx
+const notifiedRef = useRef(new Set<number>());
+useEffect(() => {
+  items.forEach(item => {
+    if (shouldNotify(item) && !notifiedRef.current.has(item.id)) {
+      notifiedRef.current.add(item.id);
+      showNotification(item);
+    }
+  });
+}, [items]);
+```
+
+**Why**: SWR `refreshInterval` triggers re-renders every cycle. Without dedup, notifications fire repeatedly.

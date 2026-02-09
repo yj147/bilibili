@@ -17,8 +17,8 @@ export default function TargetsPage() {
   const [executingId, setExecutingId] = useState<number | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBatchModal, setShowBatchModal] = useState(false);
-  const [formData, setFormData] = useState({ type: "video" as string, identifier: "", reason_id: 1, reason_text: "" });
-  const [batchData, setBatchData] = useState({ type: "video" as string, identifiers: "", reason_id: 1, reason_text: "" });
+  const [formData, setFormData] = useState({ type: "video" as string, identifier: "", reason_id: 1, reason_content_id: 1, reason_text: "" });
+  const [batchData, setBatchData] = useState({ type: "video" as string, identifiers: "", reason_id: 1, reason_content_id: 1, reason_text: "" });
 
   const handleExecute = async (id: number) => {
     setExecutingId(id);
@@ -37,7 +37,7 @@ export default function TargetsPage() {
     try {
       await api.targets.create(formData);
       setShowAddModal(false);
-      setFormData({ type: "video", identifier: "", reason_id: 1, reason_text: "" });
+      setFormData({ type: "video", identifier: "", reason_id: 1, reason_content_id: 1, reason_text: "" });
       mutate();
     } catch { alert("添加失败"); }
   };
@@ -48,7 +48,7 @@ export default function TargetsPage() {
     try {
       await api.targets.createBatch({ targets: identifiers.map(id => ({ type: batchData.type, identifier: id })) });
       setShowBatchModal(false);
-      setBatchData({ type: "video", identifiers: "", reason_id: 1, reason_text: "" });
+      setBatchData({ type: "video", identifiers: "", reason_id: 1, reason_content_id: 1, reason_text: "" });
       mutate();
     } catch { alert("批量添加失败"); }
   };
@@ -193,14 +193,40 @@ export default function TargetsPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs text-white/40 mb-1 block">举报理由 ID</label>
-                  <input type="number" value={formData.reason_id} onChange={(e) => setFormData({...formData, reason_id: parseInt(e.target.value) || 1})}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none" />
+                  <label className="text-xs text-white/40 mb-1 block">{formData.type === "user" ? "举报类别" : "举报理由 ID"}</label>
+                  {formData.type === "user" ? (
+                    <select value={formData.reason_id} onChange={(e) => setFormData({...formData, reason_id: parseInt(e.target.value)})}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none appearance-none">
+                      <option value={1} className="bg-zinc-900">色情低俗</option>
+                      <option value={2} className="bg-zinc-900">不实信息</option>
+                      <option value={3} className="bg-zinc-900">违禁</option>
+                      <option value={4} className="bg-zinc-900">人身攻击</option>
+                      <option value={5} className="bg-zinc-900">赌博诈骗</option>
+                      <option value={6} className="bg-zinc-900">违规引流外链</option>
+                    </select>
+                  ) : (
+                    <input type="number" value={formData.reason_id} onChange={(e) => setFormData({...formData, reason_id: parseInt(e.target.value) || 1})}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none" />
+                  )}
                 </div>
                 <div>
-                  <label className="text-xs text-white/40 mb-1 block">举报文本</label>
-                  <input value={formData.reason_text} onChange={(e) => setFormData({...formData, reason_text: e.target.value})}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none" placeholder="可选" />
+                  {formData.type === "user" ? (
+                    <>
+                      <label className="text-xs text-white/40 mb-1 block">举报内容</label>
+                      <select value={formData.reason_content_id} onChange={(e) => setFormData({...formData, reason_content_id: parseInt(e.target.value)})}
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none appearance-none">
+                        <option value={1} className="bg-zinc-900">头像违规</option>
+                        <option value={2} className="bg-zinc-900">昵称违规</option>
+                        <option value={3} className="bg-zinc-900">签名违规</option>
+                      </select>
+                    </>
+                  ) : (
+                    <>
+                      <label className="text-xs text-white/40 mb-1 block">举报文本</label>
+                      <input value={formData.reason_text} onChange={(e) => setFormData({...formData, reason_text: e.target.value})}
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none" placeholder="可选" />
+                    </>
+                  )}
                 </div>
               </div>
               <button onClick={handleAdd} className="w-full bg-purple-600 py-3 rounded-xl font-bold hover:bg-purple-500 transition-all mt-2">确认添加</button>

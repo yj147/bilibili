@@ -2,10 +2,15 @@
 import json
 import asyncio
 import random
+import time
 
 from backend.database import execute_query, execute_insert
-from backend.config import MIN_DELAY, MAX_DELAY
+from backend.config import MIN_DELAY, MAX_DELAY, ACCOUNT_COOLDOWN
+from backend.core.bilibili_client import _human_delay
 from backend.logger import logger
+
+# Track last report time per account for cooldown
+_account_last_report: dict[int, float] = {}
 
 
 async def execute_single_report(target: dict, account: dict) -> dict:
@@ -18,17 +23,20 @@ async def execute_single_report(target: dict, account: dict) -> dict:
         auth = BilibiliAuth.from_db_account(account)
 
         async with BilibiliClient(auth, account_index=0) as client:
+            bvid = target.get("identifier", "") if target.get("identifier", "").startswith("BV") else ""
+
             if target["type"] == "video":
                 aid = target.get("aid") or 0
                 # BV号时自动获取aid
-                if not aid and target.get("identifier", "").startswith("BV"):
-                    info = await client.get_video_info(target["identifier"])
+                if not aid and bvid:
+                    info = await client.get_video_info(bvid)
                     if info.get("code") == 0:
                         aid = info["data"]["aid"]
                 result = await client.report_video(
                     aid=aid,
                     reason=target.get("reason_id") or 1,
                     content=target.get("reason_text") or "",
+                    bvid=bvid,
                 )
             elif target["type"] == "comment":
                 identifier = target["identifier"]
@@ -42,12 +50,13 @@ async def execute_single_report(target: dict, account: dict) -> dict:
                     oid=oid, rpid=rpid,
                     reason=target.get("reason_id") or 1,
                     content=target.get("reason_text") or "",
+                    bvid=bvid,
                 )
             elif target["type"] == "user":
                 result = await client.report_user(
                     mid=int(target["identifier"]),
-                    reason=target.get("reason_text") or "违规内容",
-                    reason_id=target.get("reason_id") or 1,
+                    reason_v2=target.get("reason_id") or 4,
+                    reason=target.get("reason_content_id") or 1,
                 )
             else:
                 result = {"code": -1, "message": "Unknown target type"}
@@ -125,11 +134,26 @@ async def execute_report_for_target(target_id: int, account_ids: list[int] | Non
 
     await target_service.update_target_status(target_id, "processing")
 
+    # Shuffle accounts to avoid predictable ordering fingerprint
+    accounts = list(accounts)
+    random.shuffle(accounts)
+
     results = []
     for account in accounts:
+        # Account cooldown: skip if reported too recently
+        last_ts = _account_last_report.get(account["id"], 0)
+        elapsed = time.monotonic() - last_ts
+        if elapsed < ACCOUNT_COOLDOWN:
+            wait = ACCOUNT_COOLDOWN - elapsed + random.uniform(0, 5)
+            logger.info("[%s] Account cooldown, waiting %.1fs...", account["name"], wait)
+            await asyncio.sleep(wait)
+
         result = await execute_single_report(target, account)
+        _account_last_report[account["id"]] = time.monotonic()
         results.append(result)
-        await asyncio.sleep(random.uniform(MIN_DELAY, MAX_DELAY))
+
+        # Human-like delay between account switches
+        await asyncio.sleep(_human_delay(MIN_DELAY, MAX_DELAY))
 
     any_success = any(r["success"] for r in results)
     final_status = "completed" if any_success else "failed"
@@ -166,17 +190,30 @@ async def execute_batch_reports(target_ids: list[int] | None, account_ids: list[
         return None, "No active accounts available"
 
     all_results = []
+    shuffled_accounts = list(accounts)
     for target in targets:
         await target_service.update_target_status(target["id"], "processing")
-        for account in accounts:
+        random.shuffle(shuffled_accounts)
+        for account in shuffled_accounts:
+            # Account cooldown
+            last_ts = _account_last_report.get(account["id"], 0)
+            elapsed = time.monotonic() - last_ts
+            if elapsed < ACCOUNT_COOLDOWN:
+                wait = ACCOUNT_COOLDOWN - elapsed + random.uniform(0, 5)
+                logger.info("[%s] Account cooldown, waiting %.1fs...", account["name"], wait)
+                await asyncio.sleep(wait)
+
             result = await execute_single_report(target, account)
+            _account_last_report[account["id"]] = time.monotonic()
             all_results.append(result)
-            await asyncio.sleep(random.uniform(MIN_DELAY, MAX_DELAY))
+            await asyncio.sleep(_human_delay(MIN_DELAY, MAX_DELAY))
 
         any_success = any(r["success"] and r["target_id"] == target["id"] for r in all_results)
         await target_service.update_target_status(
             target["id"], "completed" if any_success else "failed"
         )
+        # Extra delay between targets
+        await asyncio.sleep(_human_delay(MIN_DELAY * 2, MAX_DELAY * 2))
 
     successful = sum(1 for r in all_results if r["success"])
     return {

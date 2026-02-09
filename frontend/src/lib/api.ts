@@ -95,6 +95,21 @@ export const api = {
     updateBatch: (configs: Record<string, any>) => request('/config/batch', { method: 'POST', body: JSON.stringify(configs) }),
   },
 
+  // --- Auth ---
+  auth: {
+    qrGenerate: () => request<{ qrcode_key: string; url: string }>("/auth/qr/generate"),
+    qrPoll: (qrcode_key: string, account_name?: string) =>
+      request<{ status_code: number; message: string; cookies?: Record<string, string>; refresh_token?: string }>(
+        "/auth/qr/poll", { method: "POST", body: JSON.stringify({ qrcode_key, account_name }) }
+      ),
+    qrLogin: (qrcode_key: string, account_name?: string) =>
+      request<{ status_code: number; message: string; account?: Record<string, unknown> }>(
+        "/auth/qr/login", { method: "POST", body: JSON.stringify({ qrcode_key, account_name }) }
+      ),
+    cookieStatus: (id: number) => request<{ needs_refresh: boolean; reason: string; timestamp?: number }>(`/auth/${id}/cookie-status`),
+    refreshCookies: (id: number) => request<{ success: boolean; message: string }>(`/auth/${id}/refresh`, { method: "POST" }),
+  },
+
   // --- Scheduler ---
   scheduler: {
     getTasks: () => request<ScheduledTask[]>("/scheduler/tasks"),

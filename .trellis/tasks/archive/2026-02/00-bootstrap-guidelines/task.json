@@ -2,18 +2,18 @@
   "id": "00-bootstrap-guidelines",
   "name": "Bootstrap Guidelines",
   "description": "Fill in project development guidelines for AI agents",
-  "status": "in_progress",
+  "status": "completed",
   "dev_type": "docs",
   "priority": "P1",
   "creator": "Bambi",
   "assignee": "Bambi",
   "createdAt": "2026-02-08",
-  "completedAt": null,
-  "commit": null,
+  "completedAt": "2026-02-08",
+  "commit": "9077e8a",
   "subtasks": [
-    {"name": "Fill backend guidelines", "status": "pending"},
-    {"name": "Fill frontend guidelines", "status": "pending"},
-    {"name": "Add code examples", "status": "pending"}
+    {"name": "Fill backend guidelines", "status": "completed"},
+    {"name": "Fill frontend guidelines", "status": "completed"},
+    {"name": "Add code examples", "status": "completed"}
   ],
   "relatedFiles": [
     ".trellis/spec/backend/",

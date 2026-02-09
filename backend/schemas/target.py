@@ -14,6 +14,7 @@ class TargetCreate(BaseModel):
     identifier: str
     aid: Optional[int] = None
     reason_id: Optional[int] = None
+    reason_content_id: Optional[int] = None
     reason_text: Optional[str] = None
 
 
@@ -21,11 +22,13 @@ class TargetBatchCreate(BaseModel):
     type: TargetType
     identifiers: list[str]
     reason_id: Optional[int] = None
+    reason_content_id: Optional[int] = None
     reason_text: Optional[str] = None
 
 
 class TargetUpdate(BaseModel):
     reason_id: Optional[int] = None
+    reason_content_id: Optional[int] = None
     reason_text: Optional[str] = None
     status: Optional[TargetStatus] = None
 
@@ -38,6 +41,7 @@ class TargetResponse(BaseModel):
     identifier: str
     aid: Optional[int] = None
     reason_id: Optional[int] = None
+    reason_content_id: Optional[int] = None
     reason_text: Optional[str] = None
     status: TargetStatus = "pending"
     retry_count: int = 0

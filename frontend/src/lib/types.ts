@@ -81,6 +81,31 @@ export interface AutoReplyStatus {
   active_accounts: number;
 }
 
+// Auth types
+export interface QRGenerateResponse {
+  qrcode_key: string;
+  url: string;
+}
+
+export interface QRPollResponse {
+  status_code: number;
+  message: string;
+  cookies?: Record<string, string>;
+  refresh_token?: string;
+  account?: Record<string, unknown>;
+}
+
+export interface CookieStatusResponse {
+  needs_refresh: boolean;
+  reason: string;
+  timestamp?: number;
+}
+
+export interface CookieRefreshResponse {
+  success: boolean;
+  message: string;
+}
+
 // Scheduler types
 export interface ScheduledTask {
   id: number;

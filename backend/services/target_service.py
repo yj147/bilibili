@@ -3,7 +3,7 @@ from typing import Optional
 from backend.database import execute_query, execute_insert, execute_many
 
 # Whitelist of fields allowed in dynamic UPDATE statements
-ALLOWED_UPDATE_FIELDS = {"reason_id", "reason_text", "status"}
+ALLOWED_UPDATE_FIELDS = {"reason_id", "reason_content_id", "reason_text", "status"}
 
 
 async def list_targets(
@@ -45,22 +45,22 @@ async def get_target(target_id: int):
     return rows[0] if rows else None
 
 
-async def create_target(target_type: str, identifier: str, aid=None, reason_id=None, reason_text=None):
+async def create_target(target_type: str, identifier: str, aid=None, reason_id=None, reason_content_id=None, reason_text=None):
     target_id = await execute_insert(
-        "INSERT INTO targets (type, identifier, aid, reason_id, reason_text) VALUES (?, ?, ?, ?, ?)",
-        (target_type, identifier, aid, reason_id, reason_text),
+        "INSERT INTO targets (type, identifier, aid, reason_id, reason_content_id, reason_text) VALUES (?, ?, ?, ?, ?, ?)",
+        (target_type, identifier, aid, reason_id, reason_content_id, reason_text),
     )
     rows = await execute_query("SELECT * FROM targets WHERE id = ?", (target_id,))
     return rows[0]
 
 
-async def create_targets_batch(target_type: str, identifiers: list[str], reason_id=None, reason_text=None):
+async def create_targets_batch(target_type: str, identifiers: list[str], reason_id=None, reason_content_id=None, reason_text=None):
     params_list = [
-        (target_type, identifier, None, reason_id, reason_text)
+        (target_type, identifier, None, reason_id, reason_content_id, reason_text)
         for identifier in identifiers
     ]
     await execute_many(
-        "INSERT INTO targets (type, identifier, aid, reason_id, reason_text) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO targets (type, identifier, aid, reason_id, reason_content_id, reason_text) VALUES (?, ?, ?, ?, ?, ?)",
         params_list,
     )
     return len(identifiers)

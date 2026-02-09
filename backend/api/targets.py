@@ -24,7 +24,7 @@ async def list_targets(
 async def create_target(target: TargetCreate):
     """Add a single target."""
     return await target_service.create_target(
-        target.type, target.identifier, target.aid, target.reason_id, target.reason_text
+        target.type, target.identifier, target.aid, target.reason_id, target.reason_content_id, target.reason_text
     )
 
 
@@ -32,7 +32,7 @@ async def create_target(target: TargetCreate):
 async def create_targets_batch(batch: TargetBatchCreate):
     """Add multiple targets at once."""
     count = await target_service.create_targets_batch(
-        batch.type, batch.identifiers, batch.reason_id, batch.reason_text
+        batch.type, batch.identifiers, batch.reason_id, batch.reason_content_id, batch.reason_text
     )
     return {"message": f"Created {count} targets", "count": count}
 
