@@ -120,3 +120,65 @@ QR login is a multi-step flow with state machine:
 | `error` | Error message + retry |
 
 **Key**: The modal is conditionally rendered (not hidden via CSS), so mount/unmount triggers cleanup of polling intervals.
+
+---
+
+## Edit Modal Pattern
+
+CRUD pages follow a consistent pattern for edit modals:
+
+```tsx
+const [editingItem, setEditingItem] = useState<Item | null>(null);
+const [editForm, setEditForm] = useState({ field1: '', field2: '' });
+
+// Open modal with pre-filled data
+const handleEdit = (item: Item) => {
+  setEditForm({ field1: item.field1, field2: item.field2 });
+  setEditingItem(item);
+};
+
+// Save and close
+const handleSave = async () => {
+  await api.items.update(editingItem!.id, editForm);
+  mutate(); // SWR revalidation
+  setEditingItem(null);
+};
+
+// AnimatePresence for enter/exit animation
+{editingItem && (
+  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+    {/* Modal content */}
+  </motion.div>
+)}
+```
+
+---
+
+## Mobile-Friendly Action Buttons
+
+Action buttons that appear on hover must remain visible on touch devices:
+
+```tsx
+// Good — visible on mobile, hover-reveal on desktop
+<div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition">
+  <button>Edit</button>
+  <button>Delete</button>
+</div>
+
+// Bad — invisible on mobile
+<div className="opacity-0 group-hover:opacity-100">
+```
+
+---
+
+## WebSocket Development Mode
+
+The WebSocket hook connects directly to the backend in development, bypassing the Next.js proxy (which does not support WebSocket upgrade):
+
+```typescript
+const isDev = process.env.NODE_ENV === 'development';
+const wsUrl = process.env.NEXT_PUBLIC_WS_URL
+  || (isDev ? 'ws://localhost:8000' : `${protocol}//${window.location.host}`);
+```
+
+In production (behind a reverse proxy that handles WS), it uses the page host.

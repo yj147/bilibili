@@ -35,6 +35,8 @@
 2. **No importing backend code** — communicate only via HTTP/WS
 3. **No global CSS for component styles** — use Tailwind utilities
 4. **No hardcoded API base URL** — use `process.env.NEXT_PUBLIC_API_BASE || '/api'`
+5. **No `alert()` calls** — use the Toast component for all user notifications
+6. **No `any` types** — use `unknown` with proper narrowing instead
 
 ---
 

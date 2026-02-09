@@ -10,7 +10,7 @@
 - **Output**: `stdout` (for container/Docker compatibility)
 - **Format**: `%(asctime)s [%(levelname)s] %(name)s: %(message)s`
 - **Date format**: `%Y-%m-%d %H:%M:%S`
-- **Default level**: `DEBUG`
+- **Default level**: Configurable via `SENTINEL_LOG_LEVEL` env var (default: `INFO`)
 - **Logger name**: `"sentinel"`
 
 ---
@@ -119,3 +119,26 @@ This is used for the frontend real-time log display.
 - Operation results (success/fail)
 - Error messages and types
 - Request counts and timing
+
+---
+
+## Unified Activity Logging Pattern
+
+All activity types (reports, auto-replies, scans) log to the same `report_logs` table using the `action` column to distinguish:
+
+| Action | Source | Description |
+|--------|--------|-------------|
+| `report_video` | Report service | Video report execution |
+| `report_comment` | Report service | Comment report execution |
+| `report_user` | Report service | User report execution |
+| `autoreply` | Auto-reply service | Private message auto-reply |
+
+This allows the `/api/reports/logs` endpoint to show all activity in a single unified timeline.
+
+```python
+await execute_insert(
+    """INSERT INTO report_logs (target_id, account_id, action, request_data, response_data, success, error_message)
+       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+    (target_id_or_none, account_id, "autoreply", json.dumps(request_data), json.dumps(response_data), success, error_msg),
+)
+```

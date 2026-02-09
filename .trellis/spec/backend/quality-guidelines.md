@@ -36,7 +36,7 @@ All business logic (queries, orchestration, validation) belongs in `services/`.
 
 ### 3. Pydantic Schemas with Request/Response Separation
 
-In `schemas/`, separate request models from response models:
+In `models/`, separate request models from response models:
 
 ```python
 # Request schemas
@@ -227,3 +227,59 @@ Each step can fail independently. The service must handle partial failures grace
 - The SPI endpoint for buvid fetching also doesn't need WBI
 
 This is an intentional exception to the "use BilibiliClient for Bilibili API" pattern.
+
+---
+
+## Gotcha: FastAPI Route Ordering with Static + Dynamic Paths
+
+When a router has both static paths (`/export`) and dynamic paths (`/{id}`), the **static routes must be defined BEFORE the dynamic routes**. Otherwise FastAPI matches `/export` as `id="export"` and returns a 422 validation error.
+
+```python
+# Good — static before dynamic
+@router.get("/export")
+async def export_accounts(): ...
+
+@router.get("/{account_id}")
+async def get_account(account_id: int): ...
+
+# Bad — dynamic catches static
+@router.get("/{account_id}")
+async def get_account(account_id: int): ...
+
+@router.get("/export")  # Never reached!
+async def export_accounts(): ...
+```
+
+---
+
+## Gotcha: Duplicate Background Service Prevention
+
+When the same business logic (e.g., auto-reply polling) can run as both a standalone `asyncio.Task` and an APScheduler job, add mutual exclusion guards to prevent double execution:
+
+```python
+# In standalone service start
+from backend.services.scheduler_service import get_scheduler
+scheduler = get_scheduler()
+if scheduler.running:
+    for job in scheduler.get_jobs():
+        if 'autoreply' in job.name.lower():
+            return False  # Scheduler already handling this
+
+# In scheduler job
+from backend.services.autoreply_service import _autoreply_running
+if _autoreply_running:
+    return  # Standalone service already running
+```
+
+---
+
+## Logger Level Configuration
+
+Logger level is configurable via `SENTINEL_LOG_LEVEL` environment variable (default: `INFO`).
+
+```bash
+# Set to DEBUG for development
+SENTINEL_LOG_LEVEL=DEBUG python -m backend.main
+```
+
+Valid values: `DEBUG`, `INFO`, `WARNING`, `ERROR`.
