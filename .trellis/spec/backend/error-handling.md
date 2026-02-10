@@ -171,3 +171,26 @@ Follow this mapping:
 | Pydantic validation | 422 (automatic) |
 | Auth failure | 401 |
 | Unexpected error | 500 (middleware) |
+
+---
+
+## Gotcha: Adding Pydantic Validation to Existing Fields Breaks List Endpoints
+
+When adding stricter validation (e.g., `Field(..., min_length=1)`) to a `response_model` field, existing DB rows that violate the new constraint will cause **500 errors on list endpoints**.
+
+**Why**: `response_model` validation runs during serialization, not just on input. A list endpoint tries to serialize all rows, and one invalid row fails the entire response.
+
+**Example**: Adding `min_length=1` to `AutoReplyConfig.response` caused `/api/autoreply/config` to return 500 because row id=7 had `response=''`.
+
+**Prevention**:
+1. Before adding stricter validation, query the DB for rows that would violate it
+2. Clean up or migrate invalid data first
+3. Consider adding the constraint only to `Create`/`Update` models, not the response model
+
+```python
+# Check before adding min_length=1 to response field
+rows = await execute_query("SELECT id FROM autoreply_config WHERE response = '' OR response IS NULL")
+if rows:
+    # Fix data first, then add validation
+    await execute_query("DELETE FROM autoreply_config WHERE response = ''")
+```

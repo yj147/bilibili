@@ -51,7 +51,7 @@ app = FastAPI(
     description="Bilibili 自动化管理工具 API",
     version="1.0.0",
     lifespan=lifespan,
-    dependencies=[Depends(verify_api_key)],
+
 )
 
 # Unified error handling
@@ -66,15 +66,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers
-app.include_router(accounts.router, prefix="/api/accounts", tags=["Accounts"])
-app.include_router(targets.router, prefix="/api/targets", tags=["Targets"])
-app.include_router(reports.router, prefix="/api/reports", tags=["Reports"])
-app.include_router(autoreply.router, prefix="/api/autoreply", tags=["Auto-Reply"])
-app.include_router(scheduler.router, prefix="/api/scheduler", tags=["Scheduler"])
+# Include routers (auth on HTTP routers only, WebSocket handles its own auth)
+_auth_deps = [Depends(verify_api_key)]
+app.include_router(accounts.router, prefix="/api/accounts", tags=["Accounts"], dependencies=_auth_deps)
+app.include_router(targets.router, prefix="/api/targets", tags=["Targets"], dependencies=_auth_deps)
+app.include_router(reports.router, prefix="/api/reports", tags=["Reports"], dependencies=_auth_deps)
+app.include_router(autoreply.router, prefix="/api/autoreply", tags=["Auto-Reply"], dependencies=_auth_deps)
+app.include_router(scheduler.router, prefix="/api/scheduler", tags=["Scheduler"], dependencies=_auth_deps)
 app.include_router(websocket.router, tags=["WebSocket"])
-app.include_router(config.router, prefix="/api/config", tags=["Config"])
-app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
+app.include_router(config.router, prefix="/api/config", tags=["Config"], dependencies=_auth_deps)
+app.include_router(auth.router, prefix="/api/auth", tags=["Auth"], dependencies=_auth_deps)
 
 
 @app.get("/")

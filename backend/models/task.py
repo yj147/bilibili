@@ -1,7 +1,7 @@
 """
 Pydantic models for Scheduled Tasks and Auto-Reply
 """
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, Literal
 from datetime import datetime
 
@@ -42,7 +42,7 @@ class ScheduledTask(ScheduledTaskBase):
 # Auto-reply models
 class AutoReplyConfigBase(BaseModel):
     keyword: Optional[str] = None  # None = default reply
-    response: str
+    response: str = Field(..., min_length=1)
     priority: int = 0
 
 

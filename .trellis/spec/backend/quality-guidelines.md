@@ -283,3 +283,23 @@ SENTINEL_LOG_LEVEL=DEBUG python -m backend.main
 ```
 
 Valid values: `DEBUG`, `INFO`, `WARNING`, `ERROR`.
+
+---
+
+## Gotcha: Global App Dependencies Break WebSocket Routes
+
+Never use `app = FastAPI(dependencies=[Depends(verify_api_key)])` when the app has WebSocket routes. The `Security(APIKeyHeader(...))` dependency injects a `str` parameter, but WebSocket handshakes don't go through the same HTTP header pipeline, causing a 500 error.
+
+**Solution**: Apply auth dependencies per-router instead of globally:
+
+```python
+# Good — per-router auth, WebSocket excluded
+_auth_deps = [Depends(verify_api_key)]
+app.include_router(accounts.router, prefix="/api/accounts", dependencies=_auth_deps)
+app.include_router(websocket.router, tags=["WebSocket"])  # No auth deps
+
+# Bad — global dependency breaks WebSocket
+app = FastAPI(dependencies=[Depends(verify_api_key)])
+```
+
+Also ensure `verify_api_key` reads headers directly via `request.headers.get()` instead of using `Security(APIKeyHeader(...))`, which adds an incompatible parameter type for WebSocket scope.

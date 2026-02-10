@@ -37,9 +37,12 @@ async def get_account(account_id: int):
 
 @router.put("/{account_id}", response_model=Account)
 async def update_account(account_id: int, account: AccountUpdate):
+    existing = await account_service.get_account(account_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Account not found")
     result = await account_service.update_account(account_id, account.model_dump(exclude_unset=True))
     if result is None:
-        raise HTTPException(status_code=400, detail="No valid fields to update or account not found")
+        raise HTTPException(status_code=400, detail="No valid fields to update")
     return result
 
 @router.delete("/{account_id}")

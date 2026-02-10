@@ -1,13 +1,13 @@
 """
 Pydantic models for Account management
 """
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 
 
 class AccountBase(BaseModel):
-    name: str
+    name: str = Field(..., min_length=1)
     sessdata: str
     bili_jct: str
     buvid3: Optional[str] = ""
@@ -47,7 +47,7 @@ class Account(AccountBase):
 
 class AccountStatus(BaseModel):
     id: int
-    name: str
+    name: str = Field(..., min_length=1)
     status: str
     is_valid: bool
     uid: Optional[int] = None
