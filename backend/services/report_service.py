@@ -46,9 +46,13 @@ async def execute_single_report(target: dict, account: dict) -> dict:
                 else:
                     oid = target.get("aid") or 0
                     rpid = int(identifier)
+                # B站评论举报只支持 reason 1-9，其他值会返回 12012
+                comment_reason = target.get("reason_id") or 4
+                if comment_reason not in (1, 2, 3, 4, 5, 7, 8, 9):
+                    comment_reason = 4  # fallback to 赌博诈骗
                 result = await client.report_comment(
                     oid=oid, rpid=rpid,
-                    reason=target.get("reason_id") or 1,
+                    reason=comment_reason,
                     content=target.get("reason_text") or "",
                     bvid=bvid,
                 )
@@ -61,7 +65,9 @@ async def execute_single_report(target: dict, account: dict) -> dict:
             else:
                 result = {"code": -1, "message": "Unknown target type"}
 
-            success = result.get("code") == 0
+            code = result.get("code")
+            # 0=success, 12022=already deleted, 12008=already reported — target is dealt with
+            success = code == 0 or code in (12022, 12008)
 
             await execute_insert(
                 """INSERT INTO report_logs (target_id, account_id, action, request_data, response_data, success, error_message)
@@ -123,7 +129,7 @@ async def execute_report_for_target(target_id: int, account_ids: list[int] | Non
     if account_ids:
         placeholders = ",".join("?" * len(account_ids))
         accounts = await execute_query(
-            f"SELECT * FROM accounts WHERE id IN ({placeholders}) AND is_active = 1",
+            f"SELECT * FROM accounts WHERE id IN ({placeholders}) AND is_active = 1 AND status = 'valid'",
             tuple(account_ids),
         )
     else:
@@ -132,7 +138,7 @@ async def execute_report_for_target(target_id: int, account_ids: list[int] | Non
     if not accounts:
         return None, "No active accounts available"
 
-    await target_service.update_target_status(target_id, "processing")
+    # Status already set to "processing" by the API layer (fire-and-forget)
 
     # Shuffle accounts to avoid predictable ordering fingerprint
     accounts = list(accounts)
@@ -140,19 +146,34 @@ async def execute_report_for_target(target_id: int, account_ids: list[int] | Non
 
     results = []
     for account in accounts:
-        # Account cooldown: skip if reported too recently
-        last_ts = _account_last_report.get(account["id"], 0)
-        elapsed = time.monotonic() - last_ts
-        if elapsed < ACCOUNT_COOLDOWN:
-            wait = ACCOUNT_COOLDOWN - elapsed + random.uniform(0, 5)
-            logger.info("[%s] Account cooldown, waiting %.1fs...", account["name"], wait)
-            await asyncio.sleep(wait)
+        max_rate_retries = 2
+        for attempt in range(1 + max_rate_retries):
+            # Account cooldown: wait if reported too recently
+            last_ts = _account_last_report.get(account["id"], 0)
+            elapsed = time.monotonic() - last_ts
+            if elapsed < ACCOUNT_COOLDOWN:
+                wait = ACCOUNT_COOLDOWN - elapsed + random.uniform(0, 5)
+                logger.info("[%s] Account cooldown, waiting %.1fs...", account["name"], wait)
+                await asyncio.sleep(wait)
 
-        result = await execute_single_report(target, account)
-        _account_last_report[account["id"]] = time.monotonic()
+            result = await execute_single_report(target, account)
+            _account_last_report[account["id"]] = time.monotonic()
+
+            resp = result.get("response") or {}
+            if resp.get("code") == 12019 and attempt < max_rate_retries:
+                wait = 90 + random.uniform(0, 15)
+                logger.info("[%s] Rate limited (12019), waiting %.0fs before retry %d...", account["name"], wait, attempt + 1)
+                _account_last_report[account["id"]] = time.monotonic() + wait
+                await asyncio.sleep(wait)
+                continue
+            break
+
         results.append(result)
 
-        # Human-like delay between account switches
+        # Stop trying other accounts if this one succeeded
+        if result.get("success"):
+            break
+
         await asyncio.sleep(_human_delay(MIN_DELAY, MAX_DELAY))
 
     any_success = any(r["success"] for r in results)
@@ -180,7 +201,7 @@ async def execute_batch_reports(target_ids: list[int] | None, account_ids: list[
     if account_ids:
         placeholders = ",".join("?" * len(account_ids))
         accounts = await execute_query(
-            f"SELECT * FROM accounts WHERE id IN ({placeholders}) AND is_active = 1",
+            f"SELECT * FROM accounts WHERE id IN ({placeholders}) AND is_active = 1 AND status = 'valid'",
             tuple(account_ids),
         )
     else:
@@ -195,17 +216,33 @@ async def execute_batch_reports(target_ids: list[int] | None, account_ids: list[
         await target_service.update_target_status(target["id"], "processing")
         random.shuffle(shuffled_accounts)
         for account in shuffled_accounts:
-            # Account cooldown
-            last_ts = _account_last_report.get(account["id"], 0)
-            elapsed = time.monotonic() - last_ts
-            if elapsed < ACCOUNT_COOLDOWN:
-                wait = ACCOUNT_COOLDOWN - elapsed + random.uniform(0, 5)
-                logger.info("[%s] Account cooldown, waiting %.1fs...", account["name"], wait)
-                await asyncio.sleep(wait)
+            max_rate_retries = 2
+            for attempt in range(1 + max_rate_retries):
+                last_ts = _account_last_report.get(account["id"], 0)
+                elapsed = time.monotonic() - last_ts
+                if elapsed < ACCOUNT_COOLDOWN:
+                    wait = ACCOUNT_COOLDOWN - elapsed + random.uniform(0, 5)
+                    logger.info("[%s] Account cooldown, waiting %.1fs...", account["name"], wait)
+                    await asyncio.sleep(wait)
 
-            result = await execute_single_report(target, account)
-            _account_last_report[account["id"]] = time.monotonic()
+                result = await execute_single_report(target, account)
+                _account_last_report[account["id"]] = time.monotonic()
+
+                resp = result.get("response") or {}
+                if resp.get("code") == 12019 and attempt < max_rate_retries:
+                    wait = 90 + random.uniform(0, 15)
+                    logger.info("[%s] Rate limited (12019), waiting %.0fs before retry %d...", account["name"], wait, attempt + 1)
+                    _account_last_report[account["id"]] = time.monotonic() + wait
+                    await asyncio.sleep(wait)
+                    continue
+                break
+
             all_results.append(result)
+
+            # Stop trying other accounts if this one succeeded
+            if result.get("success"):
+                break
+
             await asyncio.sleep(_human_delay(MIN_DELAY, MAX_DELAY))
 
         any_success = any(r["success"] and r["target_id"] == target["id"] for r in all_results)
@@ -286,12 +323,15 @@ async def scan_and_report_comments(
             if not rpid:
                 continue
             try:
+                comment_text = reply.get("content", {}).get("message", "")
+                display = comment_text[:30] if comment_text else None
                 await target_service.create_target(
                     target_type="comment",
                     identifier=str(rpid),
                     aid=aid,
                     reason_id=reason_id,
                     reason_text=reason_text,
+                    display_text=display,
                 )
                 targets_created += 1
             except Exception as e:

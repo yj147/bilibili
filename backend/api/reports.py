@@ -1,4 +1,5 @@
 """Report Execution API Routes"""
+import asyncio
 from fastapi import APIRouter, HTTPException
 from typing import List
 
@@ -8,31 +9,48 @@ from backend.models.report import (
     CommentScanRequest, CommentScanResult,
 )
 from backend.services import report_service
+from backend.logger import logger
 
 router = APIRouter()
 
 
-@router.post("/execute", response_model=List[ReportResult])
+async def _run_report_in_background(target_id: int, account_ids: list[int] | None):
+    """Fire-and-forget wrapper for report execution."""
+    try:
+        await report_service.execute_report_for_target(target_id, account_ids)
+    except Exception as e:
+        logger.error("Background report execution failed for target %s: %s", target_id, e)
+        from backend.services import target_service
+        await target_service.increment_retry_and_set_status(target_id, "failed")
+
+
+async def _run_batch_in_background(target_ids: list[int] | None, account_ids: list[int] | None):
+    """Fire-and-forget wrapper for batch report execution."""
+    try:
+        await report_service.execute_batch_reports(target_ids, account_ids)
+    except Exception as e:
+        logger.error("Background batch execution failed: %s", e)
+
+
+@router.post("/execute")
 async def execute_report(request: ReportExecuteRequest):
-    """Execute a report for a single target using multiple accounts."""
-    results, error = await report_service.execute_report_for_target(
-        request.target_id, request.account_ids
-    )
-    if error:
-        status = 404 if "not found" in error.lower() else 400
-        raise HTTPException(status_code=status, detail=error)
-    return results
+    """Fire-and-forget: immediately returns, processes report in background."""
+    from backend.services import target_service
+    target = await target_service.get_target(request.target_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="Target not found")
+    if target["status"] == "processing":
+        raise HTTPException(status_code=409, detail="Target is already being processed")
+    await target_service.update_target_status(request.target_id, "processing")
+    asyncio.create_task(_run_report_in_background(request.target_id, request.account_ids))
+    return {"status": "accepted", "target_id": request.target_id, "message": "Report queued for execution"}
 
 
-@router.post("/execute/batch", response_model=BatchReportResult)
+@router.post("/execute/batch")
 async def execute_batch_reports(request: ReportBatchExecuteRequest):
-    """Execute reports for multiple targets."""
-    result, error = await report_service.execute_batch_reports(
-        request.target_ids, request.account_ids
-    )
-    if error:
-        raise HTTPException(status_code=400, detail=error)
-    return result
+    """Fire-and-forget: immediately returns, processes batch in background."""
+    asyncio.create_task(_run_batch_in_background(request.target_ids, request.account_ids))
+    return {"status": "accepted", "message": "Batch execution queued"}
 
 
 @router.get("/logs", response_model=List[ReportLog])

@@ -31,7 +31,7 @@ WORKERS = int(os.getenv("SENTINEL_WORKERS", "1"))
 # Anti-detection settings
 MIN_DELAY = 3.0  # seconds (raised from 2.0 for safety)
 MAX_DELAY = 12.0  # seconds (raised from 10.0)
-ACCOUNT_COOLDOWN = 60.0  # seconds between same account's consecutive reports
+ACCOUNT_COOLDOWN = 90.0  # seconds between same account's consecutive reports (B站 requires ~90-120s)
 
 USER_AGENTS = [
     # Chrome (Windows)

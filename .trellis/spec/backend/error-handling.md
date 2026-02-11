@@ -89,14 +89,28 @@ The Bilibili client handles errors internally with retry logic:
 |------|---------|--------|--------|
 | 0 | Success | Process data | — |
 | -412 | Too many requests | Exponential backoff: `5 * 2^attempt + jitter` | Yes |
-| -352 | Risk control triggered | Long wait: 5-6 minutes | Yes |
+| -352 | Risk control triggered | **Fail-fast** — return immediately, don't wait | **No** |
 | -101 | Not logged in | Log error, mark account invalid | **No** |
 | 862, 101 | Frequency limits | Exponential backoff | Yes |
 | -999 | Internal: max retries | Returned when all retries exhausted | — |
 
+#### Report-Specific Response Codes
+
+| Code | Meaning | Action | Treat as Success? |
+|------|---------|--------|-------------------|
+| 0 | Report accepted | Toast: "已为您隐藏该评论" | Yes |
+| 12008 | Already reported | Target already dealt with | **Yes** |
+| 12012 | Invalid reason | Reason not supported for this target type | No |
+| 12019 | Rate limited | Wait 90s + retry (up to 2 times) | No (retry) |
+| 12022 | Already deleted | Content already removed by B站 | **Yes** |
+
 > **Gotcha**: `-101` must NOT be retried — the account session is invalid. Retrying wastes time and may trigger further rate limits. Log the error and return immediately.
 
-> **Gotcha**: `-352` requires a much longer wait (5+ minutes) than `-412`. Using the same backoff for both will not resolve -352.
+> **Gotcha**: `-352` should **fail-fast** (return immediately) instead of waiting 5+ minutes. The account is flagged by B站's risk control — waiting won't help. Mark the report as failed and move on.
+
+> **Gotcha**: `12022` (already deleted) and `12008` (already reported) should be treated as **success** in report_service, not failures. The target is effectively dealt with.
+
+> **Gotcha**: `12012` (举报理由异常) means the `reason_id` is invalid for this target type. **Comment reports only support reason_id 1-9** (not 10 or 11). Always validate reason_id before sending to B站.
 
 ### WBI Keys Auto-Refresh
 

@@ -84,12 +84,10 @@ class BilibiliClient:
                     await asyncio.sleep(wait_time)
                     continue
 
-                # -352: Risk control — needs longer wait
+                # -352: Risk control — fail fast, don't block for 5 minutes
                 if code == -352:
-                    wait_time = 300 + random.uniform(0, 60)  # 5-6 min
-                    logger.warning("[%s] Risk control (-352). Waiting %.0fs...", account_name, wait_time)
-                    await asyncio.sleep(wait_time)
-                    continue
+                    logger.warning("[%s] Risk control (-352). Account flagged, skipping.", account_name)
+                    return res_json
 
                 # -101: Not logged in — mark and stop retrying
                 if code == -101:

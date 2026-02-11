@@ -107,7 +107,7 @@ export default function ConfigPage() {
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
             <Settings className="text-primary" /> 设置
           </h1>
-          <p className="text-muted-foreground text-sm mt-1">系统配置和参数调整</p>
+          <p className="text-muted-foreground text-sm mt-1">调整系统运行参数</p>
         </div>
         <Button onClick={handleSave} disabled={saving} variant="outline">
           {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} 保存所有更改
@@ -116,10 +116,10 @@ export default function ConfigPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Anti-Detection Settings */}
-        <ConfigSection title="防封策略" icon={Shield}>
+        <ConfigSection title="安全防护" icon={Shield}>
           <ConfigItem
             label="最小执行延迟"
-            description="任务执行账号切换时的最小等待时间（秒）。设置过低会增加封号风险。"
+            description="切换账号时的最短等待时间。设置太短容易被封号。"
           >
             <div className="flex items-center gap-3">
               <input type="range" min="1" max="10" value={formState.min_delay}
@@ -130,7 +130,7 @@ export default function ConfigPage() {
           </ConfigItem>
           <ConfigItem
             label="最大执行延迟"
-            description="任务执行账号切换时的最大等待时间（秒）。"
+            description="切换账号时的最长等待时间。"
           >
             <div className="flex items-center gap-3">
               <input type="range" min="10" max="60" value={formState.max_delay}
@@ -140,8 +140,8 @@ export default function ConfigPage() {
             </div>
           </ConfigItem>
           <ConfigItem
-            label="UA 自动轮换"
-            description="每次请求随机选择不同的 User-Agent，模拟不同设备环境。"
+            label="设备伪装"
+            description="每次操作模拟不同的设备和浏览器，降低被识别的风险。"
           >
             <Switch checked={formState.ua_rotation} onCheckedChange={(checked) => setFormState({...formState, ua_rotation: checked})} />
           </ConfigItem>
@@ -150,8 +150,8 @@ export default function ConfigPage() {
         {/* Integration Settings */}
         <ConfigSection title="通知集成" icon={Bell}>
           <ConfigItem
-            label="Webhook 通知"
-            description="当任务失败或账号失效时，向指定的 Webhook 发送通知。"
+            label="消息推送"
+            description="任务失败或账号失效时，自动发送提醒到指定地址。"
           >
             <Input type="text" placeholder="https://..." value={formState.webhook_url}
               onChange={(e) => setFormState({...formState, webhook_url: e.target.value})}
@@ -159,16 +159,16 @@ export default function ConfigPage() {
           </ConfigItem>
           <ConfigItem
             label="通知级别"
-            description="选择哪些类型的日志需要触发通知。"
+            description="选择哪些情况下发送提醒。"
           >
             <Select value={formState.notify_level} onValueChange={(value) => setFormState({...formState, notify_level: value})}>
               <SelectTrigger className="text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="error">仅错误 (Error)</SelectItem>
-                <SelectItem value="warn">错误与警告 (Warn)</SelectItem>
-                <SelectItem value="info">全部日志 (Info)</SelectItem>
+                <SelectItem value="error">仅失败时</SelectItem>
+                <SelectItem value="warn">失败和异常时</SelectItem>
+                <SelectItem value="info">所有情况</SelectItem>
               </SelectContent>
             </Select>
           </ConfigItem>
@@ -204,12 +204,12 @@ export default function ConfigPage() {
               </div>
               <div className="space-y-4">
                 <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">内核版本</span>
-                  <span>{systemInfo?.version ?? 'loading...'}</span>
+                  <span className="text-muted-foreground">系统版本</span>
+                  <span>{systemInfo?.version ?? '加载中...'}</span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">运行环境</span>
-                  <span>{systemInfo ? `Python ${systemInfo.python} · ${systemInfo.platform}` : 'loading...'}</span>
+                  <span>{systemInfo ? `Python ${systemInfo.python} · ${systemInfo.platform}` : '加载中...'}</span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">在线账号</span>

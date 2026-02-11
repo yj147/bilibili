@@ -80,7 +80,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
             <Shield size={14} className="text-primary" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold truncate text-foreground">Sentinel Admin</p>
+            <p className="text-xs font-semibold truncate text-foreground">管理控制台</p>
             <p className="text-xs text-muted-foreground">管理员</p>
           </div>
         </div>

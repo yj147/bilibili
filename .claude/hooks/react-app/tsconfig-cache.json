@@ -1,0 +1,35 @@
+{
+  "hashes": {
+    "/home/jikns/Projects/dianzi-lab/tsconfig.json": "16b68484d32e5be3c004642d3a960119c680cc34de48ed2a2a2e9421f7ce46f8"
+  },
+  "mappings": {
+    "next-env.d.ts": {
+      "configPath": "/home/jikns/Projects/dianzi-lab/tsconfig.json",
+      "excludes": [
+        "node_modules",
+        "ui-prototype"
+      ]
+    },
+    "**/*.ts": {
+      "configPath": "/home/jikns/Projects/dianzi-lab/tsconfig.json",
+      "excludes": [
+        "node_modules",
+        "ui-prototype"
+      ]
+    },
+    "**/*.tsx": {
+      "configPath": "/home/jikns/Projects/dianzi-lab/tsconfig.json",
+      "excludes": [
+        "node_modules",
+        "ui-prototype"
+      ]
+    },
+    ".next/types/**/*.ts": {
+      "configPath": "/home/jikns/Projects/dianzi-lab/tsconfig.json",
+      "excludes": [
+        "node_modules",
+        "ui-prototype"
+      ]
+    }
+  }
+}

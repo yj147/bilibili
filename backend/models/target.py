@@ -17,6 +17,7 @@ class TargetBase(BaseModel):
     reason_id: Optional[int] = None
     reason_content_id: Optional[int] = None
     reason_text: Optional[str] = None
+    display_text: Optional[str] = None
 
 
 class TargetCreate(TargetBase):

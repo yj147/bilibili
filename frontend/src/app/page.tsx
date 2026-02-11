@@ -11,6 +11,12 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  AlertTriangle,
+  Ban,
+  Clock,
+  Trash2,
+  ShieldAlert,
+  Filter,
 } from "lucide-react";
 import { useAccounts, useTargets, useReportLogs } from "@/lib/swr";
 import { useLogStream } from "@/lib/websocket";
@@ -18,7 +24,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 /** Build an array of daily report counts for the last 7 days from log entries. */
 function buildLast7DayCounts(logs: { executed_at: string; success: boolean }[]): { counts: number[]; labels: string[] } {
-  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const dayNames = ["日", "一", "二", "三", "四", "五", "六"];
   const now = new Date();
   const counts: number[] = [];
   const labels: string[] = [];
@@ -40,6 +46,7 @@ export default function Dashboard() {
   const { logs: wsLogs, connected: wsConnected } = useLogStream(50);
   const loading = !accounts;
   const [expandedLogId, setExpandedLogId] = useState<number | null>(null);
+  const [logFilter, setLogFilter] = useState<"all" | "success" | "error">("all");
 
   // Merge WS logs (real-time) with API logs (historical), WS first
   const wsAsReportLogs = wsLogs.map((entry, i) => ({
@@ -73,6 +80,30 @@ export default function Dashboard() {
     health,
   };
 
+  // Log helpers for color-coded badges
+  type LogEntry = typeof logs[number];
+  function getLogErrorCode(log: LogEntry): number | null {
+    if (log.success) return 0;
+    const resp = log.response_data as Record<string, unknown> | null;
+    if (resp && typeof resp.code === "number") return resp.code;
+    if (log.error_message?.includes("-352")) return -352;
+    if (log.error_message?.includes("12019") || log.error_message?.includes("频率")) return 12019;
+    if (log.error_message?.includes("12022") || log.error_message?.includes("删除")) return 12022;
+    if (log.error_message?.includes("12008") || log.error_message?.includes("举报过")) return 12008;
+    return null;
+  }
+
+  function getLogBadge(code: number | null, success: boolean) {
+    if (success || code === 0) return { label: "成功", icon: CheckCircle2, bgClass: "bg-green-100", iconClass: "text-green-600", badgeClass: "bg-green-100 text-green-700" };
+    if (code === 12022) return { label: "已删除", icon: Trash2, bgClass: "bg-slate-100", iconClass: "text-slate-500", badgeClass: "bg-slate-100 text-slate-600" };
+    if (code === 12008) return { label: "已举报", icon: Ban, bgClass: "bg-blue-100", iconClass: "text-blue-500", badgeClass: "bg-blue-100 text-blue-600" };
+    if (code === 12019) return { label: "频率限制", icon: Clock, bgClass: "bg-amber-100", iconClass: "text-amber-600", badgeClass: "bg-amber-100 text-amber-700" };
+    if (code === -352) return { label: "风控拦截", icon: ShieldAlert, bgClass: "bg-red-100", iconClass: "text-red-500", badgeClass: "bg-red-100 text-red-600" };
+    return { label: "失败", icon: AlertTriangle, bgClass: "bg-red-50", iconClass: "text-red-500", badgeClass: "bg-red-50 text-red-600" };
+  }
+
+  const filteredLogs = logFilter === "all" ? logs : logs.filter((l) => logFilter === "success" ? l.success : !l.success);
+
   return (
     <div className="p-6 md:p-8">
       {/* Header */}
@@ -93,7 +124,7 @@ export default function Dashboard() {
         <Card className="md:col-span-2 card-elevated">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-sm">
-              <Activity size={16} className="text-primary" /> 核心概览
+              <Activity size={16} className="text-primary" /> 数据总览
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -141,7 +172,7 @@ export default function Dashboard() {
           <CardContent>
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Cookie 存活</span>
+                <span className="text-sm text-muted-foreground">登录有效率</span>
                 <span className={`text-sm font-bold ${stats.health > 80 ? "text-green-600" : "text-red-600"}`}>
                   {stats.health}%
                 </span>
@@ -154,7 +185,7 @@ export default function Dashboard() {
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                哨兵集群状态: {stats.health > 80 ? "优良" : "受损"}
+                账号整体状态: {stats.health > 80 ? "正常" : "异常"}
               </p>
             </div>
           </CardContent>
@@ -170,13 +201,13 @@ export default function Dashboard() {
           <CardContent>
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm text-green-600 bg-green-500/10 p-2 rounded">
-                <CheckCircle2 size={14} /> UA 自动轮换开启
+                <CheckCircle2 size={14} /> 设备伪装已开启
               </div>
               <div className={`flex items-center gap-2 text-sm p-2 rounded ${wsConnected ? 'text-blue-600 bg-blue-500/10' : 'text-yellow-600 bg-yellow-500/10'}`}>
-                <Activity size={14} className={wsConnected ? "animate-pulse" : ""} /> {wsConnected ? 'WebSocket 已连接' : 'WebSocket 连接中...'}
+                <Activity size={14} className={wsConnected ? "animate-pulse" : ""} /> {wsConnected ? '实时推送已连接' : '正在连接...'}
               </div>
               <div className="flex items-center gap-2 text-sm text-purple-600 bg-purple-500/10 p-2 rounded">
-                <ShieldCheck size={14} /> 后端引擎 v1.0 运行中
+                <ShieldCheck size={14} /> 服务正常运行
               </div>
             </div>
           </CardContent>
@@ -186,14 +217,14 @@ export default function Dashboard() {
         <Card className="md:col-span-1 md:row-span-2 card-elevated">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-sm">
-              <Users size={16} className="text-primary" /> 账号矩阵
+              <Users size={16} className="text-primary" /> 账号列表
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3 h-[400px] overflow-y-auto pr-2">
               {accounts.length === 0 ? (
                 <div className="text-center text-muted-foreground mt-20 text-sm">
-                  暂无哨兵在线
+                  暂无账号
                 </div>
               ) : (
                 accounts.map((acc) => (
@@ -223,66 +254,106 @@ export default function Dashboard() {
 
         {/* Log Area */}
         <Card className="md:col-span-3 md:row-span-2 card-elevated">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <Activity size={16} className="text-accent" /> 任务日志
-            </CardTitle>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Activity size={16} className="text-accent" /> 任务日志
+                <span className="text-xs text-muted-foreground font-normal ml-1">({filteredLogs.length})</span>
+              </CardTitle>
+              <div className="flex gap-1">
+                {(["all", "success", "error"] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setLogFilter(f)}
+                    className={`px-2.5 py-1 text-xs rounded-md transition-colors cursor-pointer ${
+                      logFilter === f
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {f === "all" ? "全部" : f === "success" ? "成功" : "失败"}
+                  </button>
+                ))}
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="h-[400px] overflow-y-auto pr-2">
-              {logs.length === 0 ? (
-                <div className="text-muted-foreground text-sm">等待任务下发中...</div>
+            <div className="h-[400px] overflow-y-auto pr-2 space-y-1">
+              {filteredLogs.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                  <Filter size={32} className="opacity-20 mb-3" />
+                  <span className="text-sm">暂无{logFilter === "all" ? "任务" : logFilter === "success" ? "成功" : "失败"}记录</span>
+                </div>
               ) : (
-                logs.map((log) => (
-                  <div key={log.id}>
-                    <div
-                      className="py-1.5 flex gap-3 border-b last:border-none cursor-pointer hover:bg-muted rounded px-2 -mx-2"
-                      onClick={() => setExpandedLogId(expandedLogId === log.id ? null : log.id)}
-                    >
-                      <span className="text-sm text-muted-foreground shrink-0">
-                        [{new Date(log.executed_at).toLocaleTimeString()}]
-                      </span>
-                      <span className={`flex-1 text-sm ${log.success ? "text-green-600" : "text-red-600"}`}>
-                        Account [{log.account_name}] executed {log.action}
-                        {log.success ? " ... SUCCESS" : ` ... FAILED: ${log.error_message}`}
-                      </span>
-                      {(log.request_data || log.response_data) && (
-                        <span className="text-muted-foreground shrink-0">
-                          {expandedLogId === log.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                        </span>
-                      )}
-                    </div>
-                    <AnimatePresence>
-                      {expandedLogId === log.id && (log.request_data || log.response_data) && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: "auto", opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          className="overflow-hidden mb-2"
-                        >
-                          <div className="bg-muted rounded-lg p-3 ml-6 space-y-2">
-                            {log.request_data && (
-                              <div>
-                                <span className="text-sm font-medium text-muted-foreground">Request:</span>
-                                <pre className="text-xs text-foreground mt-1 whitespace-pre-wrap break-all">
-                                  {JSON.stringify(log.request_data, null, 2)}
-                                </pre>
-                              </div>
-                            )}
-                            {log.response_data && (
-                              <div>
-                                <span className="text-sm font-medium text-muted-foreground">Response:</span>
-                                <pre className="text-xs text-foreground mt-1 whitespace-pre-wrap break-all">
-                                  {JSON.stringify(log.response_data, null, 2)}
-                                </pre>
-                              </div>
-                            )}
+                filteredLogs.map((log) => {
+                  const errCode = getLogErrorCode(log);
+                  const badge = getLogBadge(errCode, log.success);
+                  return (
+                    <div key={log.id}>
+                      <div
+                        className="py-2 px-3 flex items-start gap-3 rounded-lg cursor-pointer hover:bg-muted/60 transition-colors group"
+                        onClick={() => setExpandedLogId(expandedLogId === log.id ? null : log.id)}
+                      >
+                        <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${badge.bgClass}`}>
+                          <badge.icon size={12} className={badge.iconClass} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-medium text-foreground truncate">
+                              {log.account_name}
+                            </span>
+                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${badge.badgeClass}`}>
+                              {badge.label}
+                            </span>
+                            <span className="text-xs text-muted-foreground ml-auto shrink-0">
+                              {new Date(log.executed_at).toLocaleTimeString()}
+                            </span>
                           </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                ))
+                          <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                            {log.action}
+                            {!log.success && log.error_message && (
+                              <span className="text-red-500/80"> - {log.error_message}</span>
+                            )}
+                          </p>
+                        </div>
+                        {(log.request_data || log.response_data) && (
+                          <span className="text-muted-foreground shrink-0 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {expandedLogId === log.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                          </span>
+                        )}
+                      </div>
+                      <AnimatePresence>
+                        {expandedLogId === log.id && (log.request_data || log.response_data) && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="bg-muted/50 rounded-lg p-3 ml-9 mb-1 space-y-2 border border-border/50">
+                              {log.request_data && (
+                                <div>
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Request</span>
+                                  <pre className="text-xs text-foreground mt-1 whitespace-pre-wrap break-all font-mono bg-background/50 rounded p-2">
+                                    {JSON.stringify(log.request_data, null, 2)}
+                                  </pre>
+                                </div>
+                              )}
+                              {log.response_data && (
+                                <div>
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Response</span>
+                                  <pre className="text-xs text-foreground mt-1 whitespace-pre-wrap break-all font-mono bg-background/50 rounded p-2">
+                                    {JSON.stringify(log.response_data, null, 2)}
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  );
+                })
               )}
             </div>
           </CardContent>

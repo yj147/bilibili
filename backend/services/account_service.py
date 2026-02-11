@@ -46,7 +46,7 @@ async def delete_account(account_id: int):
 
 
 async def get_active_accounts():
-    return await execute_query("SELECT * FROM accounts WHERE is_active = 1")
+    return await execute_query("SELECT * FROM accounts WHERE is_active = 1 AND status = 'valid'")
 
 
 async def export_accounts(include_credentials: bool = False):

@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Bili-Sentinel | Anti-Antifans Studio",
+  title: "Bili-Sentinel | B站管理助手",
   description: "Bilibili 自动化管理工具与防黑粉控制中心",
 };
 

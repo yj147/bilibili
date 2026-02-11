@@ -17,7 +17,7 @@ export function useAccounts() {
 
 export function useTargets(params: Record<string, string> = {}) {
   const query = new URLSearchParams(params).toString();
-  return useSWR<TargetListResponse>(`/targets/?${query}`, fetcher);
+  return useSWR<TargetListResponse>(`/targets/?${query}`, fetcher, { refreshInterval: 5000 });
 }
 
 export function useReportLogs(limit = 50) {

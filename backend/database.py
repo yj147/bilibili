@@ -39,6 +39,18 @@ async def init_db():
             schema = f.read()
         await conn.executescript(schema)
         await conn.commit()
+
+        # Migrations for existing databases
+        migrations = [
+            "ALTER TABLE targets ADD COLUMN display_text TEXT",
+        ]
+        for sql in migrations:
+            try:
+                await conn.execute(sql)
+                await conn.commit()
+            except Exception:
+                pass  # Column already exists
+
         _db_initialized = True
         logger.info("Database initialized at %s", DATABASE_PATH)
 

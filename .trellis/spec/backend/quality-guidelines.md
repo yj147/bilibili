@@ -94,6 +94,66 @@ from backend.config import USER_AGENTS
 USER_AGENTS = ["Mozilla/5.0 ...", ...]  # Already defined in config.py!
 ```
 
+### 8. Account Filtering: Always Use `status='valid'`
+
+When querying accounts for any operation that calls B站 API (reporting, scanning, etc.), always filter by `status = 'valid'` in addition to `is_active = 1`. Accounts with `status = 'expiring'` have invalid credentials and will fail with -352.
+
+```python
+# Good — filter by both is_active and status
+await execute_query("SELECT * FROM accounts WHERE is_active = 1 AND status = 'valid'")
+
+# Bad — includes expired/invalid accounts
+await execute_query("SELECT * FROM accounts WHERE is_active = 1")
+```
+
+> **Gotcha**: This applies everywhere accounts are queried for B站 API calls — `account_service.get_active_accounts()`, direct SQL in `report_service`, and `scheduler_service`. Missing this in any one place causes fake accounts to be used.
+
+### 9. Scheduler Must Delegate to Service Layer
+
+Scheduler job functions must delegate to existing service functions instead of reimplementing business logic. This ensures all improvements (cooldown, retry, filtering) are applied consistently.
+
+```python
+# Good — delegate to service
+async def _run_report_batch(task_id):
+    result, error = await execute_batch_reports(target_ids=None, account_ids=None)
+
+# Bad — duplicate logic in scheduler
+async def _run_report_batch(task_id):
+    targets = await execute_query("SELECT * FROM targets WHERE status = 'pending'")
+    for target in targets:
+        for account in accounts:
+            await execute_single_report(target, account)  # Missing cooldown, retry, etc.
+```
+
+### 10. Fire-and-Forget for Long-Running API Calls
+
+When an API endpoint triggers a long-running operation (e.g., batch reports), use `asyncio.create_task()` to run it in the background and return HTTP 202 immediately.
+
+```python
+# Good — fire-and-forget
+async def execute(target_id: int):
+    await target_service.update_target_status(target_id, "processing")
+    asyncio.create_task(_run_report(target_id))  # Background
+    return {"status": "accepted"}
+
+# Bad — blocks until complete (may timeout)
+async def execute(target_id: int):
+    results = await report_service.execute_report_for_target(target_id)  # Blocks!
+    return results
+```
+
+### 11. Comment Report Reason Validation
+
+B站 comment report API only supports `reason_id` values 1-9. Values 10+ (e.g., 11 = 涉政敏感) return error code 12012. Always validate before sending.
+
+```python
+# In report_service.py
+VALID_COMMENT_REASONS = (1, 2, 3, 4, 5, 7, 8, 9)
+comment_reason = target.get("reason_id") or 4
+if comment_reason not in VALID_COMMENT_REASONS:
+    comment_reason = 4  # fallback
+```
+
 ---
 
 ## Forbidden Patterns

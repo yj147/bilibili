@@ -91,7 +91,7 @@ export default function SchedulerPage() {
       };
       if (editFormData.config_json.trim()) {
         try { data.config_json = JSON.parse(editFormData.config_json); }
-        catch { toast.error("config_json 格式无效"); return; }
+        catch { toast.error("高级参数格式无效，请检查 JSON 格式"); return; }
       }
       await api.scheduler.updateTask(editingTask.id, data as { name?: string; cron_expression?: string; interval_seconds?: number; config_json?: Record<string, unknown> });
       setShowEditModal(false);
@@ -108,25 +108,25 @@ export default function SchedulerPage() {
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
             <Calendar className="text-primary" /> 定时任务
           </h1>
-          <p className="text-muted-foreground text-sm mt-1">配置定时执行的自动化任务</p>
+          <p className="text-muted-foreground text-sm mt-1">管理自动执行的任务</p>
         </div>
         <div className="flex gap-3">
           <Button variant="outline" onClick={() => { mutateTasks(); mutateHistory(); }}>
             <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> 刷新
           </Button>
           <Button onClick={() => setShowAddModal(true)}>
-            <Plus size={18} /> 创建调度任务
+            <Plus size={18} /> 新建任务
           </Button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-4">
-          <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-widest px-2">当前调度队列</h3>
+          <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-widest px-2">任务列表</h3>
           {loading && tasks.length === 0 ? (
             <div className="flex justify-center py-20"><Loader2 className="animate-spin text-muted-foreground" size={32} /></div>
           ) : tasks.length === 0 ? (
-            <div className="text-center text-muted-foreground py-20 text-sm italic">暂无调度任务</div>
+            <div className="text-center text-muted-foreground py-20 text-sm italic">暂无任务</div>
           ) : tasks.map((task) => (
             <Card key={task.id} className="card-elevated">
               <CardContent className="flex items-center justify-between p-6">
@@ -139,7 +139,7 @@ export default function SchedulerPage() {
                     <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1"><Clock size={12} /> {task.cron_expression || `${task.interval_seconds}s`}</span>
                       <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
-                      <span>类型: {task.task_type === 'report_batch' ? '批量举报' : '私信轮询'}</span>
+                      <span>类型: {task.task_type === 'report_batch' ? '批量举报' : '自动回复检查'}</span>
                       {task.last_run_at && <>
                         <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
                         <span>上次: {new Date(task.last_run_at).toLocaleString()}</span>
@@ -149,7 +149,7 @@ export default function SchedulerPage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <Badge variant={task.is_active ? "default" : "secondary"}>
-                    {task.is_active ? 'ACTIVE' : 'PAUSED'}
+                    {task.is_active ? '运行中' : '已暂停'}
                   </Badge>
                   <Button variant="ghost" size="icon" onClick={() => handleEdit(task)}>
                     <Pencil size={18} />
@@ -179,8 +179,8 @@ export default function SchedulerPage() {
                     <p className="text-xs font-medium">{log.action}</p>
                     <p className="text-xs text-muted-foreground">{new Date(log.executed_at).toLocaleString()}</p>
                   </div>
-                  <Badge variant={log.success ? "default" : "destructive"} className="text-xs uppercase">
-                    {log.success ? 'success' : 'failed'}
+                  <Badge variant={log.success ? "default" : "destructive"} className="text-xs">
+                    {log.success ? '成功' : '失败'}
                   </Badge>
                 </div>
               ))}
@@ -193,7 +193,7 @@ export default function SchedulerPage() {
       <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>创建调度任务</DialogTitle>
+            <DialogTitle>新建任务</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
@@ -209,17 +209,17 @@ export default function SchedulerPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="report_batch">批量举报</SelectItem>
-                  <SelectItem value="autoreply_poll">私信轮询</SelectItem>
+                  <SelectItem value="autoreply_poll">自动回复检查</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label>Cron 表达式 (可选)</Label>
+              <Label>定时规则（可选，如 0 2 * * * 表示每天凌晨2点）</Label>
               <Input value={formData.cron_expression} onChange={(e) => setFormData({...formData, cron_expression: e.target.value})}
                 placeholder="例如：0 2 * * *" className="mt-1" />
             </div>
             <div>
-              <Label>间隔秒数 (Cron 为空时使用)</Label>
+              <Label>执行间隔（秒）— 不填定时规则时按此间隔重复执行</Label>
               <Input type="number" value={formData.interval_seconds} onChange={(e) => setFormData({...formData, interval_seconds: parseInt(e.target.value) || 300})}
                 className="mt-1" />
             </div>
@@ -243,7 +243,7 @@ export default function SchedulerPage() {
                 className="mt-1" />
             </div>
             <div>
-              <Label>Cron 表达式</Label>
+              <Label>定时规则</Label>
               <Input value={editFormData.cron_expression} onChange={(e) => setEditFormData({...editFormData, cron_expression: e.target.value})}
                 placeholder="留空则使用间隔秒数" className="mt-1" />
             </div>
@@ -253,7 +253,7 @@ export default function SchedulerPage() {
                 className="mt-1" />
             </div>
             <div>
-              <Label>配置 JSON (可选)</Label>
+              <Label>高级参数（可选）</Label>
               <Textarea value={editFormData.config_json} onChange={(e) => setEditFormData({...editFormData, config_json: e.target.value})}
                 className="mt-1 h-24 font-mono" placeholder='{"key": "value"}' />
             </div>

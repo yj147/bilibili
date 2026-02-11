@@ -47,6 +47,7 @@ export interface Target {
   reason_id: number | null;
   reason_content_id?: number | null;
   reason_text: string | null;
+  display_text?: string | null;
   status: TargetStatus;
   retry_count: number;
   created_at: string;

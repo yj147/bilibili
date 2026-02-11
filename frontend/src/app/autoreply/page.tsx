@@ -156,7 +156,7 @@ export default function AutoReplyPage() {
                     <div className="p-2 rounded-lg bg-primary/10 text-primary"><Hash size={18} /></div>
                     <div>
                       <h3 className="font-semibold text-foreground">{rule.keyword}</h3>
-                      <p className="text-xs text-muted-foreground uppercase tracking-widest">触发关键词 · 优先级 {rule.priority}</p>
+                      <p className="text-xs text-muted-foreground uppercase tracking-widest">匹配关键词 · 优先级 {rule.priority}</p>
                     </div>
                   </div>
                   <Switch checked={rule.is_active} onCheckedChange={() => handleToggleRule(rule)} />
@@ -182,7 +182,7 @@ export default function AutoReplyPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-sm font-bold flex items-center gap-2">
-                <Zap size={16} className="text-yellow-500" /> 全局兜底回复
+                <Zap size={16} className="text-yellow-500" /> 默认回复
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -192,7 +192,7 @@ export default function AutoReplyPage() {
                 className="h-32 resize-none"
               />
               <Button onClick={handleSaveDefault} variant="outline" className="w-full mt-4">
-                <Save size={14} /> 保存全局配置
+                <Save size={14} /> 保存默认回复
               </Button>
             </CardContent>
           </Card>
@@ -223,7 +223,7 @@ export default function AutoReplyPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>触发关键词</Label>
+              <Label>匹配关键词</Label>
               <Input value={formData.keyword} onChange={(e) => setFormData({...formData, keyword: e.target.value})}
                 placeholder="例如：你好" className="mt-1" />
             </div>
@@ -250,7 +250,7 @@ export default function AutoReplyPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>触发关键词</Label>
+              <Label>匹配关键词</Label>
               <Input value={editFormData.keyword} onChange={(e) => setEditFormData({...editFormData, keyword: e.target.value})}
                 className="mt-1" />
             </div>

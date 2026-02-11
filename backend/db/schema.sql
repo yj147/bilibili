@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS targets (
     reason_id INTEGER,
     reason_content_id INTEGER,
     reason_text TEXT,
+    display_text TEXT,
     status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
     retry_count INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

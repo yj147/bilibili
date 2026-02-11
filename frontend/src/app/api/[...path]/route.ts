@@ -14,7 +14,8 @@ async function handler(req: NextRequest) {
   });
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000);
+  const isLongRunning = url.pathname.includes("scan-comments") || url.pathname.includes("execute");
+  const timeout = setTimeout(() => controller.abort(), isLongRunning ? 120000 : 30000);
 
   try {
     const resp = await fetch(targetUrl, {

@@ -196,7 +196,7 @@ export default function AccountsPage() {
             <Users className="text-blue-500" /> 账号管理
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            管理 Bilibili 账号凭证
+            管理 B站 账号和登录信息
           </p>
         </div>
         <div className="flex gap-3">
@@ -232,7 +232,7 @@ export default function AccountsPage() {
               <tr className="border-b bg-muted/50">
                 <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">状态</th>
                 <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">账号信息</th>
-                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">凭证状态</th>
+                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">登录状态</th>
                 <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">最后检测</th>
                 <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">操作</th>
               </tr>
@@ -318,7 +318,7 @@ export default function AccountsPage() {
         <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3">
-              <Key className="text-blue-500" /> 手动导入凭证
+              <Key className="text-blue-500" /> 手动导入账号
             </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleAddAccount} className="space-y-6">
@@ -330,7 +330,7 @@ export default function AccountsPage() {
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="例如：哨兵-04"
+                  placeholder="例如：小号-01"
                 />
               </div>
               <div className="space-y-2">

@@ -45,10 +45,10 @@ async def get_target(target_id: int):
     return rows[0] if rows else None
 
 
-async def create_target(target_type: str, identifier: str, aid=None, reason_id=None, reason_content_id=None, reason_text=None):
+async def create_target(target_type: str, identifier: str, aid=None, reason_id=None, reason_content_id=None, reason_text=None, display_text=None):
     target_id = await execute_insert(
-        "INSERT INTO targets (type, identifier, aid, reason_id, reason_content_id, reason_text) VALUES (?, ?, ?, ?, ?, ?)",
-        (target_type, identifier, aid, reason_id, reason_content_id, reason_text),
+        "INSERT INTO targets (type, identifier, aid, reason_id, reason_content_id, reason_text, display_text) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (target_type, identifier, aid, reason_id, reason_content_id, reason_text, display_text),
     )
     rows = await execute_query("SELECT * FROM targets WHERE id = ?", (target_id,))
     return rows[0]

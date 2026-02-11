@@ -29,8 +29,8 @@ async function request<T = unknown>(path: string, options: RequestInit = {}): Pr
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: "Unknown error" }));
-    throw new Error(error.detail || `Request failed with status ${response.status}`);
+    const error = await response.json().catch(() => ({ detail: "未知错误" }));
+    throw new Error(error.detail || `请求失败 (${response.status})`);
   }
 
   return response.json();

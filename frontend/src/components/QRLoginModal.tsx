@@ -127,7 +127,7 @@ export default function QRLoginModal({ onClose, onSuccess }: QRLoginModalProps) 
               type="text"
               value={accountName}
               onChange={(e) => setAccountName(e.target.value)}
-              placeholder="例如：哨兵-04"
+              placeholder="例如：小号-01"
             />
           </div>
 

@@ -22,6 +22,12 @@ async def lifespan(app: FastAPI):
         logger.warning("Bili-Sentinel 必须以单 worker 模式运行 (--workers 1)")
     await init_db()
     logger.info("Database initialized")
+    # Recover targets stuck in "processing" from previous crashes
+    from backend.database import execute_query as _eq
+    await _eq("UPDATE targets SET status = 'pending' WHERE status = 'processing'")
+    _stuck = await _eq("SELECT changes() as c")
+    if _stuck and _stuck[0]["c"] > 0:
+        logger.info("Recovered %d stuck targets (processing -> pending)", _stuck[0]["c"])
     # Refresh WBI keys on startup using the first active account
     from backend.core.bilibili_auth import BilibiliAuth
     from backend.database import execute_query

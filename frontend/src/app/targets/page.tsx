@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Target, Plus, Upload, Trash2, Play, AlertTriangle,
@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useTargets, useAccounts } from "@/lib/swr";
+import { useLogStream } from "@/lib/websocket";
 import type { Target as TargetType, CommentScanResult } from "@/lib/types";
 import { toast, Toaster } from "sonner";
 import { Card } from "@/components/ui/card";
@@ -23,6 +24,79 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ConfirmDialog";
+
+const statusMap: Record<string, string> = {
+  pending: "待处理",
+  processing: "处理中",
+  completed: "已完成",
+  failed: "失败",
+};
+
+const typeMap: Record<string, string> = {
+  video: "视频",
+  comment: "评论",
+  user: "用户",
+};
+
+const videoReasonMap: Record<number, string> = {
+  1: "违法违禁",
+  2: "色情",
+  3: "低质量/刷屏",
+  4: "赌博诈骗",
+  5: "人身攻击",
+  7: "人身攻击",
+  8: "侵犯隐私",
+  9: "引战",
+  10: "青少年不良信息",
+  11: "涉政或敏感信息",
+};
+
+// B站评论举报只支持 1-9，不支持 10、11
+const commentReasonMap: Record<number, string> = {
+  1: "违法违禁",
+  2: "色情",
+  3: "低质量/刷屏",
+  4: "赌博诈骗",
+  5: "人身攻击",
+  7: "侵犯隐私",
+  8: "内容不相关",
+  9: "引战",
+};
+
+const userReasonMap: Record<number, string> = {
+  1: "色情低俗",
+  2: "不实信息",
+  3: "违禁",
+  4: "人身攻击",
+  5: "赌博诈骗",
+  6: "违规引流外链",
+};
+
+const userContentReasonMap: Record<number, string> = {
+  1: "头像违规",
+  2: "昵称违规",
+  3: "签名违规",
+};
+
+function getReasonLabel(type: string, reasonId: number | null): string {
+  if (reasonId == null) return "";
+  const map = type === "user" ? userReasonMap : type === "comment" ? commentReasonMap : videoReasonMap;
+  return map[reasonId] ?? `理由 #${reasonId}`;
+}
+
+function ReasonSelect({ type, value, onChange }: { type: string; value: number; onChange: (v: number) => void }) {
+  const map = type === "user" ? userReasonMap : type === "comment" ? commentReasonMap : videoReasonMap;
+  return (
+    <Select value={value.toString()} onValueChange={(v) => onChange(parseInt(v))}>
+      <SelectTrigger><SelectValue /></SelectTrigger>
+      <SelectContent>
+        {Object.entries(map).map(([k, v]) => (
+          <SelectItem key={k} value={k}>{v}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
 
 export default function TargetsPage() {
   const [page, setPage] = useState(1);
@@ -42,6 +116,19 @@ export default function TargetsPage() {
   const loading = isLoading;
   const { confirm, ConfirmDialog } = useConfirm();
 
+  // WebSocket: auto-refresh when a report event arrives
+  const { logs: wsLogs } = useLogStream(10);
+  const lastWsCountRef = useRef(0);
+  useEffect(() => {
+    if (wsLogs.length > 0 && wsLogs.length !== lastWsCountRef.current) {
+      const latest = wsLogs[0];
+      if (latest.type === "report") {
+        mutate();
+      }
+      lastWsCountRef.current = wsLogs.length;
+    }
+  }, [wsLogs, mutate]);
+
   const [executingId, setExecutingId] = useState<number | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBatchModal, setShowBatchModal] = useState(false);
@@ -57,8 +144,11 @@ export default function TargetsPage() {
 
   const handleExecute = async (id: number) => {
     setExecutingId(id);
-    try { await api.reports.execute(id); mutate(); toast.success("执行成功"); }
-    catch { toast.error("执行失败，请检查账号状态"); }
+    try {
+      await api.reports.execute(id);
+      mutate();
+      toast.success("举报已提交，后台执行中");
+    } catch { toast.error("执行失败，请检查账号状态"); }
     finally { setExecutingId(null); }
   };
 
@@ -156,6 +246,15 @@ export default function TargetsPage() {
       toast.error(e instanceof Error ? e.message : "扫描失败");
     } finally {
       setScanning(false);
+    }
+  };
+
+  const identifierPlaceholder = (type: string) => {
+    switch (type) {
+      case "video": return "输入 BV 号";
+      case "comment": return "输入 oid:rpid";
+      case "user": return "输入用户 UID";
+      default: return "";
     }
   };
 
@@ -264,7 +363,7 @@ export default function TargetsPage() {
       {/* Target list */}
       <Card className="overflow-hidden min-h-[300px] card-static">
         <div className="p-6 border-b flex items-center justify-between bg-muted/50">
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-widest">目标执行队列</h3>
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-widest">目标列表</h3>
         </div>
         {loading && targets.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground">
@@ -284,15 +383,19 @@ export default function TargetsPage() {
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm">{target.identifier}</span>
-                      <Badge variant={target.status === 'failed' ? 'destructive' : 'secondary'} className="text-xs uppercase tracking-widest">
-                        {target.type}
+                      <span className="font-mono text-sm">
+                        {target.type === 'comment' && target.display_text ? target.display_text : target.identifier}
+                      </span>
+                      <Badge variant={target.status === 'failed' ? 'destructive' : 'secondary'} className="text-xs tracking-widest">
+                        {typeMap[target.type] ?? target.type}
                       </Badge>
                     </div>
                     <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
-                      <span>理由 ID: {target.reason_id}</span>
-                      <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
-                      <span className="truncate max-w-[200px]">{target.reason_text}</span>
+                      <span>举报理由: {getReasonLabel(target.type, target.reason_id)}</span>
+                      {target.reason_text && <>
+                        <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
+                        <span className="truncate max-w-[200px]">{target.reason_text}</span>
+                      </>}
                     </div>
                   </div>
                 </div>
@@ -303,9 +406,9 @@ export default function TargetsPage() {
                       {target.status === 'completed' && <CheckCircle2 size={10} />}
                       {target.status === 'failed' && <AlertTriangle size={10} />}
                       {target.status === 'processing' && <Loader2 size={10} className="animate-spin" />}
-                      {target.status.toUpperCase()}
+                      {statusMap[target.status] ?? target.status}
                     </span>
-                    <span className="text-xs text-muted-foreground">重试次数: {target.retry_count}</span>
+                    <span className="text-xs text-muted-foreground">已尝试: {target.retry_count} 次</span>
                   </div>
                   <div className="flex gap-2">
                     <Button variant="ghost" size="icon" onClick={() => handleEdit(target)} className="h-8 w-8">
@@ -350,46 +453,32 @@ export default function TargetsPage() {
               <Select value={formData.type} onValueChange={(v) => setFormData({...formData, type: v})}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="video">视频 (BV号)</SelectItem>
-                  <SelectItem value="comment">评论 (oid:rpid)</SelectItem>
-                  <SelectItem value="user">用户 (UID)</SelectItem>
+                  <SelectItem value="video">视频</SelectItem>
+                  <SelectItem value="comment">评论</SelectItem>
+                  <SelectItem value="user">用户</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div>
               <Label className="mb-1">目标标识</Label>
               <Input value={formData.identifier} onChange={(e) => setFormData({...formData, identifier: e.target.value})}
-                placeholder="BV号 / oid:rpid / UID" />
+                placeholder={identifierPlaceholder(formData.type)} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label className="mb-1">{formData.type === "user" ? "举报类别" : "举报理由 ID"}</Label>
-                {formData.type === "user" ? (
-                  <Select value={formData.reason_id.toString()} onValueChange={(v) => setFormData({...formData, reason_id: parseInt(v)})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">色情低俗</SelectItem>
-                      <SelectItem value="2">不实信息</SelectItem>
-                      <SelectItem value="3">违禁</SelectItem>
-                      <SelectItem value="4">人身攻击</SelectItem>
-                      <SelectItem value="5">赌博诈骗</SelectItem>
-                      <SelectItem value="6">违规引流外链</SelectItem>
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input type="number" value={formData.reason_id} onChange={(e) => setFormData({...formData, reason_id: parseInt(e.target.value) || 1})} />
-                )}
+                <Label className="mb-1">{formData.type === "user" ? "举报类别" : "举报理由"}</Label>
+                <ReasonSelect type={formData.type} value={formData.reason_id} onChange={(v) => setFormData({...formData, reason_id: v})} />
               </div>
               <div>
                 {formData.type === "user" ? (
                   <>
-                    <Label className="mb-1">举报内容</Label>
+                    <Label className="mb-1">内容理由</Label>
                     <Select value={formData.reason_content_id.toString()} onValueChange={(v) => setFormData({...formData, reason_content_id: parseInt(v)})}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="1">头像违规</SelectItem>
-                        <SelectItem value="2">昵称违规</SelectItem>
-                        <SelectItem value="3">签名违规</SelectItem>
+                        {Object.entries(userContentReasonMap).map(([k, v]) => (
+                          <SelectItem key={k} value={k}>{v}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </>
@@ -433,8 +522,8 @@ export default function TargetsPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label className="mb-1">举报理由 ID</Label>
-                <Input type="number" value={batchData.reason_id} onChange={(e) => setBatchData({...batchData, reason_id: parseInt(e.target.value) || 1})} />
+                <Label className="mb-1">举报理由</Label>
+                <ReasonSelect type={batchData.type} value={batchData.reason_id} onChange={(v) => setBatchData({...batchData, reason_id: v})} />
               </div>
               <div>
                 <Label className="mb-1">举报文本</Label>
@@ -458,19 +547,26 @@ export default function TargetsPage() {
               <div className="p-3 bg-muted rounded-lg">
                 <span className="text-xs text-muted-foreground">目标: </span>
                 <span className="text-sm font-mono">{editingTarget.identifier}</span>
-                <Badge variant="secondary" className="ml-2 text-xs uppercase tracking-widest">{editingTarget.type}</Badge>
+                <Badge variant="secondary" className="ml-2 text-xs tracking-widest">{typeMap[editingTarget.type] ?? editingTarget.type}</Badge>
               </div>
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="mb-1">举报理由 ID</Label>
-                    <Input type="number" value={editFormData.reason_id} onChange={(e) => setEditFormData({...editFormData, reason_id: parseInt(e.target.value) || 1})} />
-                  </div>
-                  <div>
-                    <Label className="mb-1">内容理由 ID</Label>
-                    <Input type="number" value={editFormData.reason_content_id} onChange={(e) => setEditFormData({...editFormData, reason_content_id: parseInt(e.target.value) || 1})} />
-                  </div>
+                <div>
+                  <Label className="mb-1">举报理由</Label>
+                  <ReasonSelect type={editingTarget.type} value={editFormData.reason_id} onChange={(v) => setEditFormData({...editFormData, reason_id: v})} />
                 </div>
+                {editingTarget.type === "user" && (
+                  <div>
+                    <Label className="mb-1">内容理由</Label>
+                    <Select value={editFormData.reason_content_id.toString()} onValueChange={(v) => setEditFormData({...editFormData, reason_content_id: parseInt(v)})}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(userContentReasonMap).map(([k, v]) => (
+                          <SelectItem key={k} value={k}>{v}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div>
                   <Label className="mb-1">举报文本</Label>
                   <Input value={editFormData.reason_text} onChange={(e) => setEditFormData({...editFormData, reason_text: e.target.value})} />
@@ -519,8 +615,8 @@ export default function TargetsPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label className="mb-1">举报理由 ID</Label>
-                <Input type="number" value={scanData.reason_id} onChange={(e) => setScanData({...scanData, reason_id: parseInt(e.target.value) || 9})} />
+                <Label className="mb-1">举报理由</Label>
+                <ReasonSelect type="video" value={scanData.reason_id} onChange={(v) => setScanData({...scanData, reason_id: v})} />
               </div>
               <div>
                 <Label className="mb-1">最大页数</Label>

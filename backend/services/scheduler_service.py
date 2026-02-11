@@ -67,35 +67,22 @@ def stop_scheduler():
 # ── Job functions ─────────────────────────────────────────────────────────
 
 async def _run_report_batch(task_id: int):
-    """Job function: execute pending reports using all active accounts."""
-    from backend.services.report_service import execute_single_report
+    """Job function: execute pending reports using all active accounts.
+    Delegates to report_service.execute_batch_reports which handles cooldown,
+    12019 retry, valid-account filtering, and early exit on success."""
+    from backend.services.report_service import execute_batch_reports
     from backend.api.websocket import broadcast_log
 
-    targets = await execute_query("SELECT * FROM targets WHERE status = 'pending'")
-    accounts = await execute_query("SELECT * FROM accounts WHERE is_active = 1")
-    if not targets or not accounts:
-        return
-
-    await broadcast_log("scheduler", f"Task #{task_id}: {len(targets)} targets, {len(accounts)} accounts")
-    for target in targets:
-        await execute_query("UPDATE targets SET status = 'processing' WHERE id = ?", (target["id"],))
-        for account in accounts:
-            await execute_single_report(target, account)
-            await asyncio.sleep(random.uniform(MIN_DELAY, MAX_DELAY))
-        logs = await execute_query(
-            "SELECT success FROM report_logs WHERE target_id = ? ORDER BY executed_at DESC LIMIT ?",
-            (target["id"], len(accounts)),
-        )
-        any_success = any(l["success"] for l in logs)
-        await execute_query(
-            "UPDATE targets SET status = ?, updated_at = datetime('now') WHERE id = ?",
-            ("completed" if any_success else "failed", target["id"]),
-        )
+    await broadcast_log("scheduler", f"Task #{task_id}: starting batch reports")
+    result, error = await execute_batch_reports(target_ids=None, account_ids=None)
+    if error:
+        await broadcast_log("scheduler", f"Task #{task_id}: {error}")
+    else:
+        await broadcast_log("scheduler", f"Task #{task_id} completed: {result['successful']}/{result['total_targets']} successful")
 
     await execute_query(
         "UPDATE scheduled_tasks SET last_run_at = datetime('now') WHERE id = ?", (task_id,)
     )
-    await broadcast_log("scheduler", f"Task #{task_id} completed")
 
 
 async def _run_autoreply_poll(task_id: int):
@@ -113,7 +100,7 @@ async def _run_autoreply_poll(task_id: int):
     from backend.core.bilibili_auth import BilibiliAuth
     from backend.api.websocket import broadcast_log
 
-    accounts = await execute_query("SELECT * FROM accounts WHERE is_active = 1")
+    accounts = await execute_query("SELECT * FROM accounts WHERE is_active = 1 AND status = 'valid'")
     configs = await execute_query(
         "SELECT * FROM autoreply_config WHERE is_active = 1 ORDER BY priority DESC"
     )
@@ -178,7 +165,7 @@ async def _run_cookie_health_check(task_id: int):
     from backend.services.auth_service import check_cookie_refresh_needed, refresh_account_cookies
     from backend.api.websocket import broadcast_log
 
-    accounts = await execute_query("SELECT * FROM accounts WHERE is_active = 1")
+    accounts = await execute_query("SELECT * FROM accounts WHERE is_active = 1 AND status = 'valid'")
     for account in accounts:
         try:
             status = await check_cookie_refresh_needed(account["id"])
