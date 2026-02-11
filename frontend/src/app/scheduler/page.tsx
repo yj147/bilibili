@@ -1,20 +1,30 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
-import { motion } from "framer-motion";
+import React, { useState } from "react";
 import {
-  Calendar, Clock, Play, Pause, RefreshCw, History,
-  CheckCircle2, AlertCircle, Plus, Loader2, X, Trash2, Pencil
+  Calendar, Clock, RefreshCw, History,
+  CheckCircle2, AlertCircle, Plus, Loader2, Trash2, Pencil
 } from "lucide-react";
+import { toast, Toaster } from "sonner";
 import { api } from "@/lib/api";
 import { useSchedulerTasks, useSchedulerHistory } from "@/lib/swr";
 import type { ScheduledTask } from "@/lib/types";
-import ToastContainer, { ToastItem, createToast } from "@/components/Toast";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 export default function SchedulerPage() {
   const { data: tasks = [], mutate: mutateTasks, isLoading: tasksLoading } = useSchedulerTasks();
   const { data: history = [], mutate: mutateHistory } = useSchedulerHistory(20);
   const loading = tasksLoading;
+  const { confirm, ConfirmDialog } = useConfirm();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingTask, setEditingTask] = useState<ScheduledTask | null>(null);
@@ -24,16 +34,8 @@ export default function SchedulerPage() {
   });
   const [editFormData, setEditFormData] = useState({
     name: "", cron_expression: "", interval_seconds: 300,
-    config_json: "" // stored as JSON string for editing
+    config_json: ""
   });
-  const [toasts, setToasts] = useState<ToastItem[]>([]);
-
-  const addToast = useCallback((type: ToastItem["type"], message: string) => {
-    setToasts((prev) => [...prev, createToast(type, message)]);
-  }, []);
-  const dismissToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
 
   const handleCreate = async () => {
     try {
@@ -47,25 +49,25 @@ export default function SchedulerPage() {
       setFormData({ name: "", task_type: "report_batch", cron_expression: "", interval_seconds: 300 });
       mutateTasks();
       mutateHistory();
-      addToast("success", "任务创建成功");
-    } catch { addToast("error", "创建失败"); }
+      toast.success("任务创建成功");
+    } catch { toast.error("创建失败"); }
   };
 
   const handleToggle = async (id: number) => {
     try {
       await api.scheduler.toggleTask(id);
       mutateTasks();
-    } catch { addToast("error", "操作失败"); }
+    } catch { toast.error("操作失败"); }
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("确定删除此任务？")) return;
+    if (!await confirm({ description: "确定删除此任务？", variant: "destructive", confirmText: "删除" })) return;
     try {
       await api.scheduler.deleteTask(id);
       mutateTasks();
       mutateHistory();
-      addToast("success", "任务已删除");
-    } catch { addToast("error", "删除失败"); }
+      toast.success("任务已删除");
+    } catch { toast.error("删除失败"); }
   };
 
   const handleEdit = (task: ScheduledTask) => {
@@ -89,182 +91,179 @@ export default function SchedulerPage() {
       };
       if (editFormData.config_json.trim()) {
         try { data.config_json = JSON.parse(editFormData.config_json); }
-        catch { addToast("error", "config_json 格式无效"); return; }
+        catch { toast.error("config_json 格式无效"); return; }
       }
       await api.scheduler.updateTask(editingTask.id, data as { name?: string; cron_expression?: string; interval_seconds?: number; config_json?: Record<string, unknown> });
       setShowEditModal(false);
       setEditingTask(null);
       mutateTasks();
-      addToast("success", "任务更新成功");
-    } catch { addToast("error", "更新失败"); }
+      toast.success("任务更新成功");
+    } catch { toast.error("更新失败"); }
   };
 
   return (
-    <div className="p-4 md:p-8 relative">
-      <div className="absolute top-0 right-0 w-[40%] h-[40%] bg-purple-500/5 blur-[120px] rounded-full pointer-events-none" />
-
+    <div className="p-4 md:p-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-            <Calendar className="text-purple-400" /> 任务调度中心
+            <Calendar className="text-primary" /> 定时任务
           </h1>
-          <p className="text-white/40 text-sm mt-1">自动化任务管理，支持 Cron 表达式，让哨兵 7x24 小时待命</p>
+          <p className="text-muted-foreground text-sm mt-1">配置定时执行的自动化任务</p>
         </div>
         <div className="flex gap-3">
-          <button onClick={() => { mutateTasks(); mutateHistory(); }} className="glass-card px-4 py-2 rounded-xl text-sm flex items-center gap-2 hover:bg-white/5 transition-colors">
+          <Button variant="outline" onClick={() => { mutateTasks(); mutateHistory(); }}>
             <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> 刷新
-          </button>
-          <button onClick={() => setShowAddModal(true)}
-            className="bg-purple-600 px-6 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 hover:bg-purple-500 transition-all shadow-[0_0_20px_rgba(147,51,234,0.3)]">
+          </Button>
+          <Button onClick={() => setShowAddModal(true)}>
             <Plus size={18} /> 创建调度任务
-          </button>
+          </Button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-4">
-          <h3 className="text-sm font-bold text-white/40 uppercase tracking-widest px-2">当前调度队列</h3>
+          <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-widest px-2">当前调度队列</h3>
           {loading && tasks.length === 0 ? (
-            <div className="flex justify-center py-20"><Loader2 className="animate-spin text-white/20" size={32} /></div>
+            <div className="flex justify-center py-20"><Loader2 className="animate-spin text-muted-foreground" size={32} /></div>
           ) : tasks.length === 0 ? (
-            <div className="text-center text-white/20 py-20 text-sm italic">暂无调度任务</div>
+            <div className="text-center text-muted-foreground py-20 text-sm italic">暂无调度任务</div>
           ) : tasks.map((task) => (
-            <motion.div key={task.id} whileHover={{ scale: 1.01 }}
-              className="glass-card rounded-2xl p-6 border-white/5 flex items-center justify-between group">
-              <div className="flex items-center gap-4">
-                <div className={`p-3 rounded-xl bg-white/5 ${task.is_active ? 'text-green-400' : 'text-zinc-500'}`}>
-                  {task.is_active ? <RefreshCw className="animate-spin" size={24} style={{ animationDuration: '4s' }} /> : <Clock size={24} />}
-                </div>
-                <div>
-                  <h4 className="font-bold text-lg">{task.name}</h4>
-                  <div className="flex items-center gap-3 mt-1 text-xs text-white/30">
-                    <span className="flex items-center gap-1"><Clock size={12} /> {task.cron_expression || `${task.interval_seconds}s`}</span>
-                    <span className="w-1 h-1 rounded-full bg-white/10" />
-                    <span>类型: {task.task_type === 'report_batch' ? '批量举报' : '私信轮询'}</span>
-                    {task.last_run_at && <>
-                      <span className="w-1 h-1 rounded-full bg-white/10" />
-                      <span>上次: {new Date(task.last_run_at).toLocaleString()}</span>
-                    </>}
+            <Card key={task.id} className="card-elevated">
+              <CardContent className="flex items-center justify-between p-6">
+                <div className="flex items-center gap-4">
+                  <div className={`p-3 rounded-xl bg-muted ${task.is_active ? 'text-green-500' : 'text-muted-foreground'}`}>
+                    {task.is_active ? <RefreshCw className="animate-spin" size={24} style={{ animationDuration: '4s' }} /> : <Clock size={24} />}
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-lg">{task.name}</h4>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1"><Clock size={12} /> {task.cron_expression || `${task.interval_seconds}s`}</span>
+                      <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
+                      <span>类型: {task.task_type === 'report_batch' ? '批量举报' : '私信轮询'}</span>
+                      {task.last_run_at && <>
+                        <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
+                        <span>上次: {new Date(task.last_run_at).toLocaleString()}</span>
+                      </>}
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className={`text-[10px] px-2 py-0.5 rounded-full ${task.is_active ? 'bg-green-500/10 text-green-400' : 'bg-zinc-500/10 text-zinc-400'}`}>
-                  {task.is_active ? 'ACTIVE' : 'PAUSED'}
-                </span>
-                <button onClick={() => handleEdit(task)} className="p-2 text-white/20 hover:text-orange-400 transition-colors">
-                  <Pencil size={18} />
-                </button>
-                <button onClick={() => handleToggle(task.id)} className="p-3 rounded-full bg-white/5 hover:bg-white/10 text-white/40 hover:text-white transition-all">
-                  {task.is_active ? <Pause size={18} /> : <Play size={18} />}
-                </button>
-                <button onClick={() => handleDelete(task.id)} className="p-2 text-white/10 hover:text-red-400 transition-colors">
-                  <Trash2 size={18} />
-                </button>
-              </div>
-            </motion.div>
+                <div className="flex items-center gap-3">
+                  <Badge variant={task.is_active ? "default" : "secondary"}>
+                    {task.is_active ? 'ACTIVE' : 'PAUSED'}
+                  </Badge>
+                  <Button variant="ghost" size="icon" onClick={() => handleEdit(task)}>
+                    <Pencil size={18} />
+                  </Button>
+                  <Switch checked={task.is_active} onCheckedChange={() => handleToggle(task.id)} />
+                  <Button variant="ghost" size="icon" onClick={() => handleDelete(task.id)} className="text-muted-foreground hover:text-destructive">
+                    <Trash2 size={18} />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
 
         <div className="space-y-4">
-          <h3 className="text-sm font-bold text-white/40 uppercase tracking-widest px-2 flex items-center gap-2">
+          <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-widest px-2 flex items-center gap-2">
             <History size={16} /> 执行历史
           </h3>
-          <div className="glass-card rounded-3xl p-6 border-white/5 h-[500px] overflow-y-auto custom-scrollbar">
-            {history.length === 0 ? (
-              <div className="text-center text-white/20 py-10 text-sm italic">暂无执行记录</div>
-            ) : history.map((log, i) => (
-              <div key={log.id || i} className="flex items-center gap-3 py-3 border-b border-white/5 last:border-none">
-                {log.success ? <CheckCircle2 size={14} className="text-green-500" /> : <AlertCircle size={14} className="text-red-500" />}
-                <div className="flex-1">
-                  <p className="text-xs font-medium">{log.action}</p>
-                  <p className="text-[10px] text-white/30">{new Date(log.executed_at).toLocaleString()}</p>
+          <Card>
+            <CardContent className="p-6 h-[500px] overflow-y-auto">
+              {history.length === 0 ? (
+                <div className="text-center text-muted-foreground py-10 text-sm italic">暂无执行记录</div>
+              ) : history.map((log, i) => (
+                <div key={log.id || i} className="flex items-center gap-3 py-3 border-b last:border-none">
+                  {log.success ? <CheckCircle2 size={14} className="text-green-500" /> : <AlertCircle size={14} className="text-red-500" />}
+                  <div className="flex-1">
+                    <p className="text-xs font-medium">{log.action}</p>
+                    <p className="text-xs text-muted-foreground">{new Date(log.executed_at).toLocaleString()}</p>
+                  </div>
+                  <Badge variant={log.success ? "default" : "destructive"} className="text-xs uppercase">
+                    {log.success ? 'success' : 'failed'}
+                  </Badge>
                 </div>
-                <span className={`text-[10px] uppercase font-bold ${log.success ? 'text-green-500/50' : 'text-red-500/50'}`}>
-                  {log.success ? 'success' : 'failed'}
-                </span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </CardContent>
+          </Card>
         </div>
       </div>
 
       {/* Create task modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} onClick={() => setShowAddModal(false)} className="absolute inset-0 bg-black/80 backdrop-blur-md" />
-          <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="glass-card w-full max-w-md rounded-3xl p-8 relative z-10 border-white/10 shadow-2xl">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold">创建调度任务</h2>
-              <button onClick={() => setShowAddModal(false)}><X size={20} className="text-white/40" /></button>
+      <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>创建调度任务</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>任务名称</Label>
+              <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})}
+                placeholder="例如：每日清理" className="mt-1" />
             </div>
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs text-white/40 mb-1 block">任务名称</label>
-                <input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-purple-500 outline-none" placeholder="例如：每日清理" />
-              </div>
-              <div>
-                <label className="text-xs text-white/40 mb-1 block">任务类型</label>
-                <select value={formData.task_type} onChange={(e) => setFormData({...formData, task_type: e.target.value})}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-purple-500 outline-none appearance-none">
-                  <option value="report_batch" className="bg-zinc-900">批量举报</option>
-                  <option value="autoreply_poll" className="bg-zinc-900">私信轮询</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-white/40 mb-1 block">Cron 表达式 (可选)</label>
-                <input value={formData.cron_expression} onChange={(e) => setFormData({...formData, cron_expression: e.target.value})}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-purple-500 outline-none" placeholder="例如：0 2 * * *" />
-              </div>
-              <div>
-                <label className="text-xs text-white/40 mb-1 block">间隔秒数 (Cron 为空时使用)</label>
-                <input type="number" value={formData.interval_seconds} onChange={(e) => setFormData({...formData, interval_seconds: parseInt(e.target.value) || 300})}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-purple-500 outline-none" />
-              </div>
-              <button onClick={handleCreate} className="w-full bg-purple-600 py-3 rounded-xl font-bold hover:bg-purple-500 transition-all mt-2">确认创建</button>
+            <div>
+              <Label>任务类型</Label>
+              <Select value={formData.task_type} onValueChange={(value) => setFormData({...formData, task_type: value})}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="report_batch">批量举报</SelectItem>
+                  <SelectItem value="autoreply_poll">私信轮询</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          </motion.div>
-        </div>
-      )}
+            <div>
+              <Label>Cron 表达式 (可选)</Label>
+              <Input value={formData.cron_expression} onChange={(e) => setFormData({...formData, cron_expression: e.target.value})}
+                placeholder="例如：0 2 * * *" className="mt-1" />
+            </div>
+            <div>
+              <Label>间隔秒数 (Cron 为空时使用)</Label>
+              <Input type="number" value={formData.interval_seconds} onChange={(e) => setFormData({...formData, interval_seconds: parseInt(e.target.value) || 300})}
+                className="mt-1" />
+            </div>
+            <Button onClick={handleCreate} className="w-full mt-2">确认创建</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit task modal */}
-      {showEditModal && editingTask && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} onClick={() => setShowEditModal(false)} className="absolute inset-0 bg-black/80 backdrop-blur-md" />
-          <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="glass-card w-full max-w-md rounded-3xl p-8 relative z-10 border-white/10 shadow-2xl">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold flex items-center gap-2"><Pencil size={18} className="text-orange-400" /> 编辑任务</h2>
-              <button onClick={() => setShowEditModal(false)}><X size={20} className="text-white/40" /></button>
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil size={18} /> 编辑任务
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>任务名称</Label>
+              <Input value={editFormData.name} onChange={(e) => setEditFormData({...editFormData, name: e.target.value})}
+                className="mt-1" />
             </div>
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs text-white/40 mb-1 block">任务名称</label>
-                <input value={editFormData.name} onChange={(e) => setEditFormData({...editFormData, name: e.target.value})}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-orange-500 outline-none" />
-              </div>
-              <div>
-                <label className="text-xs text-white/40 mb-1 block">Cron 表达式</label>
-                <input value={editFormData.cron_expression} onChange={(e) => setEditFormData({...editFormData, cron_expression: e.target.value})}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-orange-500 outline-none" placeholder="留空则使用间隔秒数" />
-              </div>
-              <div>
-                <label className="text-xs text-white/40 mb-1 block">间隔秒数</label>
-                <input type="number" value={editFormData.interval_seconds} onChange={(e) => setEditFormData({...editFormData, interval_seconds: parseInt(e.target.value) || 300})}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-orange-500 outline-none" />
-              </div>
-              <div>
-                <label className="text-xs text-white/40 mb-1 block">配置 JSON (可选)</label>
-                <textarea value={editFormData.config_json} onChange={(e) => setEditFormData({...editFormData, config_json: e.target.value})}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-orange-500 outline-none h-24 resize-none font-mono" placeholder='{"key": "value"}' />
-              </div>
-              <button onClick={handleEditSubmit} className="w-full bg-orange-600 py-3 rounded-xl font-bold hover:bg-orange-500 transition-all mt-2">保存更改</button>
+            <div>
+              <Label>Cron 表达式</Label>
+              <Input value={editFormData.cron_expression} onChange={(e) => setEditFormData({...editFormData, cron_expression: e.target.value})}
+                placeholder="留空则使用间隔秒数" className="mt-1" />
             </div>
-          </motion.div>
-        </div>
-      )}
+            <div>
+              <Label>间隔秒数</Label>
+              <Input type="number" value={editFormData.interval_seconds} onChange={(e) => setEditFormData({...editFormData, interval_seconds: parseInt(e.target.value) || 300})}
+                className="mt-1" />
+            </div>
+            <div>
+              <Label>配置 JSON (可选)</Label>
+              <Textarea value={editFormData.config_json} onChange={(e) => setEditFormData({...editFormData, config_json: e.target.value})}
+                className="mt-1 h-24 font-mono" placeholder='{"key": "value"}' />
+            </div>
+            <Button onClick={handleEditSubmit} className="w-full mt-2">保存更改</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
-      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      <ConfirmDialog />
+      <Toaster richColors />
     </div>
   );
 }

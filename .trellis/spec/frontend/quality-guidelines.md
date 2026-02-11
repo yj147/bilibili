@@ -16,6 +16,7 @@
 | Framer Motion | 12 | Animations |
 | Lucide React | Latest | Icons |
 | shadcn/ui | Latest | UI primitives |
+| sonner | Latest | Toast notifications |
 
 ---
 
@@ -35,17 +36,20 @@
 2. **No importing backend code** — communicate only via HTTP/WS
 3. **No global CSS for component styles** — use Tailwind utilities
 4. **No hardcoded API base URL** — use `process.env.NEXT_PUBLIC_API_BASE || '/api'`
-5. **No `alert()` calls** — use the Toast component for all user notifications
+5. **No `alert()` or `confirm()` calls** — use sonner for toasts, `useConfirm` hook for confirmations
 6. **No `any` types** — use `unknown` with proper narrowing instead
 
 ---
 
 ## UI/UX Standards
 
-- **Dark theme**: `bg-black`, `text-white`, glass-card effects
+- **Light theme**: B站-inspired with pink primary (`#fb7299`), blue accent (`#00a1d6`)
+- **Background**: Subtle gradient (`bg-gradient-subtle`), cards use `card-elevated` for hover depth
 - **Status colors**: Green=active, Red=failed, Blue=connected, Yellow=warning
 - **Loading**: `animate-spin` on buttons, empty state messages in Chinese
 - **Language**: UI text in Chinese, code in English
+- **Confirmations**: shadcn AlertDialog via `useConfirm` hook (not native `confirm()`)
+- **Toasts**: sonner (`toast.success/error/warning` + `<Toaster richColors />`)
 
 ---
 
@@ -53,9 +57,9 @@
 
 ```bash
 cd frontend
-npm run dev       # Development server
-npm run build     # Production build
-npm run lint      # ESLint
+bun run dev       # Development server
+bun run build     # Production build
+bun run lint      # ESLint
 ```
 
 ---
@@ -68,6 +72,7 @@ npm run lint      # ESLint
 - [ ] Default values for SWR data
 - [ ] Chinese text for UI labels
 - [ ] Types match backend schemas
+- [ ] No `confirm()` or `alert()` calls
 
 ---
 

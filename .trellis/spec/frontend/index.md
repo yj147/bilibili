@@ -6,9 +6,9 @@
 
 ## Overview
 
-Bili-Sentinel frontend is a **Next.js 16** app with **React 19**, using **SWR** for data fetching, **Tailwind CSS 4** for styling, **shadcn/ui** for components, and **Framer Motion** for animations.
+Bili-Sentinel frontend is a **Next.js 16** app with **React 19**, using **SWR** for data fetching, **Tailwind CSS 4** for styling, **shadcn/ui** for components, **sonner** for toasts, and **Framer Motion** for animations.
 
-Dark-themed dashboard with cyberpunk/sentinel aesthetic, real-time WebSocket logs, bento grid layout, and glassmorphism effects.
+Light-themed B站-inspired dashboard with pink primary (`#fb7299`), blue accent (`#00a1d6`), card-based layout with elevation shadows, and subtle gradient backgrounds.
 
 ---
 

@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
-import { motion } from "framer-motion";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Users,
   Plus,
@@ -14,17 +13,38 @@ import {
   AlertTriangle,
   Cookie,
   Pencil,
-  X,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAccounts } from "@/lib/swr";
 import type { Account } from "@/lib/types";
 import QRLoginModal from "@/components/QRLoginModal";
-import ToastContainer, { ToastItem, createToast } from "@/components/Toast";
+import { toast, Toaster } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 export default function AccountsPage() {
   const { data: accounts = [], mutate, isLoading } = useAccounts();
   const loading = isLoading;
+  const { confirm, ConfirmDialog } = useConfirm();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -32,29 +52,20 @@ export default function AccountsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkingId, setCheckingId] = useState<number | null>(null);
   const [refreshingId, setRefreshingId] = useState<number | null>(null);
-  const [toasts, setToasts] = useState<ToastItem[]>([]);
   const notifiedRef = useRef<Set<number>>(new Set());
-
-  const addToast = useCallback((type: ToastItem["type"], message: string) => {
-    setToasts((prev) => [...prev, createToast(type, message)]);
-  }, []);
-
-  const dismissToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
 
   useEffect(() => {
     for (const acc of accounts) {
       if ((acc.status === "expiring" || acc.status === "invalid") && !notifiedRef.current.has(acc.id)) {
         notifiedRef.current.add(acc.id);
         if (acc.status === "expiring") {
-          addToast("warning", "[" + acc.name + "] Cookie 即将过期，请刷新或重新扫码登录");
+          toast.warning("[" + acc.name + "] Cookie 即将过期，请刷新或重新扫码登录");
         } else if (acc.status === "invalid") {
-          addToast("error", "[" + acc.name + "] Cookie 已失效，请重新扫码登录");
+          toast.error("[" + acc.name + "] Cookie 已失效，请重新扫码登录");
         }
       }
     }
-  }, [accounts, addToast]);
+  }, [accounts]);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -82,9 +93,9 @@ export default function AccountsPage() {
       setShowAddModal(false);
       setFormData({ name: "", sessdata: "", bili_jct: "", buvid3: "", group_tag: "default" });
       mutate();
-      addToast("success", "账号添加成功");
+      toast.success("账号添加成功");
     } catch {
-      addToast("error", "添加失败，请检查填写内容");
+      toast.error("添加失败，请检查填写内容");
     } finally {
       setIsSubmitting(false);
     }
@@ -113,9 +124,9 @@ export default function AccountsPage() {
       setShowEditModal(false);
       setEditingAccount(null);
       mutate();
-      addToast("success", "账号更新成功");
+      toast.success("账号更新成功");
     } catch {
-      addToast("error", "更新失败");
+      toast.error("更新失败");
     } finally {
       setIsSubmitting(false);
     }
@@ -126,10 +137,10 @@ export default function AccountsPage() {
     try {
       await api.accounts.check(id);
       mutate();
-      addToast("success", "检测完成");
+      toast.success("检测完成");
     } catch (err) {
       console.error("Check failed", err);
-      addToast("error", "检测失败");
+      toast.error("检测失败");
     } finally {
       setCheckingId(null);
     }
@@ -141,162 +152,157 @@ export default function AccountsPage() {
       const result = await api.auth.refreshCookies(id);
       if (result.success) {
         mutate();
-        addToast("success", "Cookie 刷新成功");
+        toast.success("Cookie 刷新成功");
       } else {
-        addToast("error", result.message || "Cookie 刷新失败");
+        toast.error(result.message || "Cookie 刷新失败");
       }
     } catch {
-      addToast("error", "Cookie 刷新请求失败");
+      toast.error("Cookie 刷新请求失败");
     } finally {
       setRefreshingId(null);
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("确定要移除此哨兵账号吗？")) return;
+    if (!await confirm({ description: "确定要移除此账号吗？", variant: "destructive", confirmText: "移除" })) return;
     try {
       await api.accounts.delete(id);
       mutate();
-      addToast("success", "账号已移除");
+      toast.success("账号已移除");
     } catch (err) {
       console.error("Delete failed", err);
-      addToast("error", "删除失败");
+      toast.error("删除失败");
     }
   };
 
   const statusDisplay = (status: string) => {
     switch (status) {
       case "valid":
-        return { label: "ACTIVE", dotClass: "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]", badgeClass: "border-green-500/30 text-green-400 bg-green-500/5" };
+        return { label: "正常", className: "border-green-500/30 text-green-600" };
       case "expiring":
-        return { label: "EXPIRING", dotClass: "bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.4)]", badgeClass: "border-yellow-500/30 text-yellow-400 bg-yellow-500/5" };
+        return { label: "即将过期", className: "border-yellow-500/30 text-yellow-600" };
       case "invalid":
-        return { label: "EXPIRED", dotClass: "bg-red-500", badgeClass: "border-red-500/30 text-red-400 bg-red-500/5" };
+        return { label: "已失效", className: "border-red-500/30 text-red-600" };
       default:
-        return { label: "UNKNOWN", dotClass: "bg-zinc-600 animate-pulse", badgeClass: "border-zinc-500/30 text-zinc-400 bg-zinc-500/5" };
+        return { label: "未知", className: "border-muted text-muted-foreground" };
     }
   };
 
   return (
-    <div className="p-4 md:p-8 relative">
-      <div className="absolute top-0 right-0 w-[30%] h-[30%] bg-blue-500/5 blur-[100px] rounded-full pointer-events-none" />
-
+    <div className="p-4 md:p-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-            <Users className="text-blue-500" /> 账号管理矩阵
+            <Users className="text-blue-500" /> 账号管理
           </h1>
-          <p className="text-white/40 text-sm mt-1">
-            管理并巡检你的哨兵账号，确保 WBI 签名状态正常
+          <p className="text-muted-foreground text-sm mt-1">
+            管理 Bilibili 账号凭证
           </p>
         </div>
         <div className="flex gap-3">
-          <button
-            onClick={() => mutate()}
-            className="glass-card px-4 py-2 rounded-xl text-sm flex items-center gap-2 hover:bg-white/5 transition-colors cursor-pointer"
-          >
+          <Button variant="outline" onClick={() => mutate()}>
             <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> 刷新列表
-          </button>
-          <button
-            onClick={() => setShowQRModal(true)}
-            className="bg-purple-600 px-5 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 hover:bg-purple-500 transition-all shadow-[0_0_20px_rgba(147,51,234,0.3)] cursor-pointer"
-          >
+          </Button>
+          <Button variant="secondary" onClick={() => setShowQRModal(true)}>
             <QrCode size={18} /> 扫码登录
-          </button>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="bg-blue-600 px-5 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 hover:bg-blue-500 transition-all shadow-[0_0_20px_rgba(37,99,235,0.3)] cursor-pointer"
-          >
+          </Button>
+          <Button onClick={() => setShowAddModal(true)}>
             <Plus size={18} /> 手动导入
-          </button>
+          </Button>
         </div>
       </div>
 
-      <div className="glass-card rounded-3xl overflow-hidden border-white/5 min-h-[400px]">
+      <Card className="overflow-hidden min-h-[400px] card-elevated">
         {loading && accounts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-[400px] text-white/20">
+          <div className="flex flex-col items-center justify-center h-[400px] text-muted-foreground">
             <Loader2 className="animate-spin mb-4" size={40} />
-            <p>正在同步哨兵矩阵...</p>
+            <p>加载中...</p>
           </div>
         ) : accounts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-[400px] text-white/20">
-            <Users className="mb-4 opacity-10" size={60} />
-            <p>尚未接入任何哨兵账号</p>
-            <button
-              onClick={() => setShowQRModal(true)}
-              className="mt-4 px-5 py-2 bg-purple-600 hover:bg-purple-500 rounded-xl text-sm font-medium flex items-center gap-2 text-white transition-colors cursor-pointer"
-            >
+          <div className="flex flex-col items-center justify-center h-[400px] text-muted-foreground">
+            <Users className="mb-4 opacity-30" size={60} />
+            <p>暂无账号</p>
+            <Button variant="secondary" className="mt-4" onClick={() => setShowQRModal(true)}>
               <QrCode size={16} /> 扫码登录添加
-            </button>
+            </Button>
           </div>
         ) : (
           <table className="w-full text-left">
             <thead>
-              <tr className="border-b border-white/5 bg-white/5">
-                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-white/40 text-center">状态</th>
-                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-white/40">账号信息</th>
-                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-white/40 text-center">凭证状态</th>
-                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-white/40">最后检测</th>
-                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-white/40 text-right">操作</th>
+              <tr className="border-b bg-muted/50">
+                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">状态</th>
+                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">账号信息</th>
+                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">凭证状态</th>
+                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">最后检测</th>
+                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">操作</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5">
+            <tbody className="divide-y">
               {accounts.map((acc) => {
                 const sd = statusDisplay(acc.status);
                 return (
-                  <tr key={acc.id} className="hover:bg-white/[0.02] transition-colors group">
+                  <tr key={acc.id} className="hover:bg-muted/30 transition-colors group">
                     <td className="px-6 py-4 text-center">
-                      <div className={`w-2 h-2 rounded-full mx-auto ${sd.dotClass}`} />
+                      <div className={`w-2 h-2 rounded-full mx-auto ${
+                        acc.status === "valid" ? "bg-green-500" :
+                        acc.status === "expiring" ? "bg-yellow-500" :
+                        acc.status === "invalid" ? "bg-red-500" : "bg-zinc-400 animate-pulse"
+                      }`} />
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
-                        <span className="font-medium text-sm">{acc.name}</span>
-                        <span className="text-[10px] text-white/30 tracking-tight">
+                        <span className="font-medium text-sm text-foreground">{acc.name}</span>
+                        <span className="text-xs text-muted-foreground tracking-tight">
                           UID: {acc.uid || "未同步"} · {acc.group_tag}
                         </span>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full border inline-flex items-center gap-1 ${sd.badgeClass}`}>
-                        {acc.status === "expiring" && <AlertTriangle size={10} />}
+                      <Badge variant="outline" className={sd.className}>
+                        {acc.status === "expiring" && <AlertTriangle size={10} className="mr-1" />}
                         {sd.label}
-                      </span>
+                      </Badge>
                     </td>
-                    <td className="px-6 py-4 text-sm text-white/50 font-mono text-[10px]">
+                    <td className="px-6 py-4 text-xs text-muted-foreground font-mono">
                       {acc.last_check_at ? new Date(acc.last_check_at).toLocaleString() : "从不"}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           onClick={() => handleEdit(acc)}
                           title="编辑账号"
-                          className="p-2 hover:bg-white/10 rounded-lg text-white/40 hover:text-orange-400 transition-colors cursor-pointer"
                         >
                           <Pencil size={16} />
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           onClick={() => handleCheck(acc.id)}
                           disabled={checkingId === acc.id}
                           title="检测有效性"
-                          className="p-2 hover:bg-white/10 rounded-lg text-white/40 hover:text-blue-400 transition-colors cursor-pointer"
                         >
                           {checkingId === acc.id ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           onClick={() => handleRefreshCookie(acc.id)}
                           disabled={refreshingId === acc.id}
                           title="刷新 Cookie"
-                          className="p-2 hover:bg-white/10 rounded-lg text-white/40 hover:text-yellow-400 transition-colors cursor-pointer"
                         >
                           {refreshingId === acc.id ? <Loader2 size={16} className="animate-spin" /> : <Cookie size={16} />}
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           onClick={() => handleDelete(acc.id)}
                           title="移除账号"
-                          className="p-2 hover:bg-red-500/20 rounded-lg text-white/40 hover:text-red-400 transition-colors cursor-pointer"
+                          className="hover:text-destructive"
                         >
                           <Trash2 size={16} />
-                        </button>
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -305,200 +311,172 @@ export default function AccountsPage() {
             </tbody>
           </table>
         )}
-      </div>
+      </Card>
 
       {/* Manual import modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            onClick={() => setShowAddModal(false)}
-            className="absolute inset-0 bg-black/80 backdrop-blur-md"
-          />
-          <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="glass-card w-full max-w-xl rounded-3xl p-8 relative z-10 border-white/10 shadow-2xl"
-          >
-            <h2 className="text-2xl font-bold mb-6 flex items-center gap-3 text-glow">
+      <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3">
               <Key className="text-blue-500" /> 手动导入凭证
-            </h2>
-            <form onSubmit={handleAddAccount} className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs text-white/40 ml-1">账号别名</label>
-                  <input
-                    required
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="例如：哨兵-04"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none transition-colors"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-white/40 ml-1">账号分组</label>
-                  <select
-                    value={formData.group_tag}
-                    onChange={(e) => setFormData({ ...formData, group_tag: e.target.value })}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none transition-colors appearance-none"
-                  >
-                    <option value="default" className="bg-zinc-900">默认组</option>
-                    <option value="report" className="bg-zinc-900">举报组</option>
-                    <option value="reply" className="bg-zinc-900">回复组</option>
-                  </select>
-                </div>
-              </div>
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleAddAccount} className="space-y-6">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-xs text-white/40 ml-1">SESSDATA</label>
-                <textarea
+                <Label>账号别名</Label>
+                <Input
                   required
-                  value={formData.sessdata}
-                  onChange={(e) => setFormData({ ...formData, sessdata: e.target.value })}
-                  placeholder="粘贴 Cookie 中的 SESSDATA 值..."
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none transition-colors h-20 resize-none"
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="例如：哨兵-04"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs text-white/40 ml-1">bili_jct (CSRF)</label>
-                  <input
-                    required
-                    type="text"
-                    value={formData.bili_jct}
-                    onChange={(e) => setFormData({ ...formData, bili_jct: e.target.value })}
-                    placeholder="粘贴 bili_jct 值..."
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none transition-colors"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-white/40 ml-1">buvid3 (可选)</label>
-                  <input
-                    type="text"
-                    value={formData.buvid3}
-                    onChange={(e) => setFormData({ ...formData, buvid3: e.target.value })}
-                    placeholder="粘贴 buvid3 值..."
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none transition-colors"
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label>账号分组</Label>
+                <Select
+                  value={formData.group_tag}
+                  onValueChange={(val) => setFormData({ ...formData, group_tag: val })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">默认组</SelectItem>
+                    <SelectItem value="report">举报组</SelectItem>
+                    <SelectItem value="reply">回复组</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <button
-                disabled={isSubmitting}
-                className="w-full bg-blue-600 py-4 rounded-xl font-bold hover:bg-blue-500 transition-all shadow-[0_0_30px_rgba(37,99,235,0.4)] mt-4 flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : "立即接入哨兵矩阵"}
-              </button>
-            </form>
-          </motion.div>
-        </div>
-      )}
+            </div>
+            <div className="space-y-2">
+              <Label>SESSDATA</Label>
+              <Textarea
+                required
+                value={formData.sessdata}
+                onChange={(e) => setFormData({ ...formData, sessdata: e.target.value })}
+                placeholder="粘贴 Cookie 中的 SESSDATA 值..."
+                className="h-20 resize-none"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>bili_jct (CSRF)</Label>
+                <Input
+                  required
+                  type="text"
+                  value={formData.bili_jct}
+                  onChange={(e) => setFormData({ ...formData, bili_jct: e.target.value })}
+                  placeholder="粘贴 bili_jct 值..."
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>buvid3 (可选)</Label>
+                <Input
+                  type="text"
+                  value={formData.buvid3}
+                  onChange={(e) => setFormData({ ...formData, buvid3: e.target.value })}
+                  placeholder="粘贴 buvid3 值..."
+                />
+              </div>
+            </div>
+            <Button disabled={isSubmitting} className="w-full" size="lg">
+              {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : "添加账号"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit account modal */}
-      {showEditModal && editingAccount && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            onClick={() => setShowEditModal(false)}
-            className="absolute inset-0 bg-black/80 backdrop-blur-md"
-          />
-          <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="glass-card w-full max-w-xl rounded-3xl p-8 relative z-10 border-white/10 shadow-2xl"
-          >
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold flex items-center gap-3">
-                <Pencil className="text-orange-400" /> 编辑账号
-              </h2>
-              <button onClick={() => setShowEditModal(false)}><X size={20} className="text-white/40" /></button>
-            </div>
-            <form onSubmit={handleEditSubmit} className="space-y-5">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs text-white/40 ml-1">账号别名</label>
-                  <input
-                    type="text"
-                    value={editFormData.name}
-                    onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-orange-500 outline-none transition-colors"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-white/40 ml-1">账号分组</label>
-                  <select
-                    value={editFormData.group_tag}
-                    onChange={(e) => setEditFormData({ ...editFormData, group_tag: e.target.value })}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-orange-500 outline-none transition-colors appearance-none"
-                  >
-                    <option value="default" className="bg-zinc-900">默认组</option>
-                    <option value="report" className="bg-zinc-900">举报组</option>
-                    <option value="reply" className="bg-zinc-900">回复组</option>
-                  </select>
-                </div>
-              </div>
+      <Dialog open={showEditModal && !!editingAccount} onOpenChange={setShowEditModal}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3">
+              <Pencil className="text-orange-500" /> 编辑账号
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleEditSubmit} className="space-y-5">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-xs text-white/40 ml-1">SESSDATA</label>
-                <textarea
-                  value={editFormData.sessdata}
-                  onChange={(e) => setEditFormData({ ...editFormData, sessdata: e.target.value })}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-orange-500 outline-none transition-colors h-20 resize-none"
+                <Label>账号别名</Label>
+                <Input
+                  type="text"
+                  value={editFormData.name}
+                  onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs text-white/40 ml-1">bili_jct (CSRF)</label>
-                  <input
-                    type="text"
-                    value={editFormData.bili_jct}
-                    onChange={(e) => setEditFormData({ ...editFormData, bili_jct: e.target.value })}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-orange-500 outline-none transition-colors"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-white/40 ml-1">buvid3</label>
-                  <input
-                    type="text"
-                    value={editFormData.buvid3}
-                    onChange={(e) => setEditFormData({ ...editFormData, buvid3: e.target.value })}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-orange-500 outline-none transition-colors"
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label>账号分组</Label>
+                <Select
+                  value={editFormData.group_tag}
+                  onValueChange={(val) => setEditFormData({ ...editFormData, group_tag: val })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">默认组</SelectItem>
+                    <SelectItem value="report">举报组</SelectItem>
+                    <SelectItem value="reply">回复组</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs text-white/40 ml-1">buvid4</label>
-                  <input
-                    type="text"
-                    value={editFormData.buvid4}
-                    onChange={(e) => setEditFormData({ ...editFormData, buvid4: e.target.value })}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-orange-500 outline-none transition-colors"
+            </div>
+            <div className="space-y-2">
+              <Label>SESSDATA</Label>
+              <Textarea
+                value={editFormData.sessdata}
+                onChange={(e) => setEditFormData({ ...editFormData, sessdata: e.target.value })}
+                className="h-20 resize-none"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>bili_jct (CSRF)</Label>
+                <Input
+                  type="text"
+                  value={editFormData.bili_jct}
+                  onChange={(e) => setEditFormData({ ...editFormData, bili_jct: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>buvid3</Label>
+                <Input
+                  type="text"
+                  value={editFormData.buvid3}
+                  onChange={(e) => setEditFormData({ ...editFormData, buvid3: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>buvid4</Label>
+                <Input
+                  type="text"
+                  value={editFormData.buvid4}
+                  onChange={(e) => setEditFormData({ ...editFormData, buvid4: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>状态</Label>
+                <div className="flex items-center gap-3 h-9 px-3">
+                  <Switch
+                    checked={editFormData.is_active}
+                    onCheckedChange={(checked) => setEditFormData({ ...editFormData, is_active: checked })}
                   />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-white/40 ml-1">状态</label>
-                  <button
-                    type="button"
-                    onClick={() => setEditFormData({ ...editFormData, is_active: !editFormData.is_active })}
-                    className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-colors ${
-                      editFormData.is_active ? 'bg-green-600/20 text-green-400 border border-green-500/30' : 'bg-red-600/20 text-red-400 border border-red-500/30'
-                    }`}
-                  >
+                  <span className="text-sm text-muted-foreground">
                     {editFormData.is_active ? "启用中" : "已禁用"}
-                  </button>
+                  </span>
                 </div>
               </div>
-              <button
-                disabled={isSubmitting}
-                className="w-full bg-orange-600 py-4 rounded-xl font-bold hover:bg-orange-500 transition-all shadow-[0_0_30px_rgba(234,88,12,0.3)] mt-2 flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : "保存更改"}
-              </button>
-            </form>
-          </motion.div>
-        </div>
-      )}
+            </div>
+            <Button disabled={isSubmitting} className="w-full" size="lg">
+              {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : "保存更改"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* QR Login modal */}
       {showQRModal && (
@@ -507,7 +485,8 @@ export default function AccountsPage() {
           onSuccess={() => mutate()}
         />
       )}
-      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      <ConfirmDialog />
+      <Toaster richColors />
     </div>
   );
 }
