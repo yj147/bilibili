@@ -1,13 +1,12 @@
 """System Configuration API Routes"""
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Any
 from backend.services.config_service import get_config, set_config, get_all_configs
 
 router = APIRouter()
 
 class ConfigValue(BaseModel):
-    value: Any
+    value: str | int | float | bool
 
 @router.get("/")
 async def list_configs():
@@ -22,11 +21,17 @@ async def get_config_value(key: str):
 
 @router.put("/{key}")
 async def update_config_value(key: str, body: ConfigValue):
-    await set_config(key, body.value)
+    try:
+        await set_config(key, body.value)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return {"key": key, "value": body.value}
 
 @router.post("/batch")
 async def update_configs_batch(configs: dict):
     for key, value in configs.items():
-        await set_config(key, value)
+        try:
+            await set_config(key, value)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
     return {"message": f"Updated {len(configs)} configs"}

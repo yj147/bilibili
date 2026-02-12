@@ -1,5 +1,5 @@
 """Scheduler API Routes"""
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from typing import List
 
 from backend.models.task import ScheduledTask, ScheduledTaskCreate, ScheduledTaskUpdate
@@ -36,8 +36,10 @@ async def get_scheduled_task(task_id: int):
 @router.put("/tasks/{task_id}", response_model=ScheduledTask)
 async def update_scheduled_task(task_id: int, task: ScheduledTaskUpdate):
     result = await scheduler_service.update_task(task_id, task.model_dump(exclude_unset=True))
+    if result == "no_valid_fields":
+        raise HTTPException(status_code=400, detail="No valid fields to update")
     if result is None:
-        raise HTTPException(status_code=400, detail="No fields to update or task not found")
+        raise HTTPException(status_code=404, detail="Task not found")
     return result
 
 
@@ -57,5 +59,5 @@ async def toggle_scheduled_task(task_id: int):
 
 
 @router.get("/history")
-async def get_scheduler_history(limit: int = 50):
+async def get_scheduler_history(limit: int = Query(default=50, ge=1, le=1000)):
     return await scheduler_service.get_history(limit)

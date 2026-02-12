@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.database import init_db, close_db
 from backend.logger import logger
+from backend.config import DEBUG
 from backend.middleware import register_exception_handlers
 from backend.auth import verify_api_key
 from backend.api import accounts, targets, reports, autoreply, scheduler, websocket, config, auth
@@ -43,6 +44,8 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Bili-Sentinel starting up...")
     import os as _os
+    if not _os.getenv("SENTINEL_API_KEY", ""):
+        logger.warning("⚠ SENTINEL_API_KEY not set! All API routes are UNAUTHENTICATED. Set this in production!")
     if (_os.cpu_count() or 1) > 1:
         logger.warning("Bili-Sentinel 必须以单 worker 模式运行 (--workers 1)")
     await init_db()
@@ -92,7 +95,8 @@ app = FastAPI(
     description="Bilibili 自动化管理工具 API",
     version="1.0.0",
     lifespan=lifespan,
-
+    docs_url="/docs" if DEBUG else None,
+    redoc_url="/redoc" if DEBUG else None,
 )
 
 # Unified error handling
@@ -146,5 +150,5 @@ async def system_info():
 
 if __name__ == "__main__":
     import uvicorn
-    from backend.config import HOST, PORT, DEBUG
+    from backend.config import HOST, PORT
     uvicorn.run("backend.main:app", host=HOST, port=PORT, reload=DEBUG)

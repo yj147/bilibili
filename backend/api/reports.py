@@ -58,12 +58,16 @@ async def execute_report(request: ReportExecuteRequest):
 @router.post("/execute/batch")
 async def execute_batch_reports(request: ReportBatchExecuteRequest):
     """Fire-and-forget: immediately returns, processes batch in background."""
-    asyncio.create_task(_run_batch_in_background(request.target_ids, request.account_ids))
+    try:
+        asyncio.create_task(_run_batch_in_background(request.target_ids, request.account_ids))
+    except Exception as e:
+        logger.error("Failed to create batch background task: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to queue batch execution")
     return {"status": "accepted", "message": "Batch execution queued"}
 
 
 @router.get("/logs", response_model=List[ReportLog])
-async def get_report_logs(limit: int = 100):
+async def get_report_logs(limit: int = Query(default=100, ge=1, le=1000)):
     """Get recent report logs."""
     return await report_service.get_report_logs(limit)
 

@@ -19,6 +19,21 @@ async def get_config(key: str):
 
 async def set_config(key: str, value):
     """Set a config value (upsert)."""
+    # Validate known config keys
+    if key == "log_retention_days":
+        try:
+            days = int(value)
+            if days < 1:
+                raise ValueError("log_retention_days must be >= 1")
+        except (TypeError, ValueError) as e:
+            raise ValueError(str(e))
+    if key in ("min_delay", "max_delay"):
+        try:
+            v = float(value)
+            if v < 0:
+                raise ValueError(f"{key} must be >= 0")
+        except (TypeError, ValueError) as e:
+            raise ValueError(str(e))
     serialized = json.dumps(value) if not isinstance(value, str) else value
     await execute_query(
         "INSERT INTO system_config (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) "

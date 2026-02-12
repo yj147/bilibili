@@ -56,8 +56,10 @@ async def get_target(target_id: int):
 async def update_target(target_id: int, target: TargetUpdate):
     """Update a target."""
     result = await target_service.update_target(target_id, target.model_dump(exclude_unset=True))
+    if result == "no_valid_fields":
+        raise HTTPException(status_code=400, detail="No valid fields to update")
     if result is None:
-        raise HTTPException(status_code=400, detail="No fields to update or target not found")
+        raise HTTPException(status_code=404, detail="Target not found")
     return result
 
 
@@ -72,5 +74,8 @@ async def delete_target(target_id: int):
 @router.delete("/")
 async def delete_targets_by_status(status: str = Query(...)):
     """Delete all targets with a specific status."""
-    count = await target_service.delete_targets_by_status(status)
+    try:
+        count = await target_service.delete_targets_by_status(status)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return {"message": f"Deleted {count} targets", "count": count}

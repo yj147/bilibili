@@ -1,6 +1,7 @@
 """
 Bili-Sentinel API Key Authentication
 """
+import hmac
 import os
 from fastapi import HTTPException, Request
 
@@ -23,6 +24,6 @@ async def verify_api_key(request: Request):
     if request.url.path in _PUBLIC_PATHS:
         return  # public route
     api_key = request.headers.get("x-api-key")
-    if api_key and api_key == _API_KEY:
+    if api_key and hmac.compare_digest(api_key, _API_KEY):
         return
     raise HTTPException(status_code=401, detail="Invalid or missing API key")

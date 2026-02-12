@@ -17,13 +17,15 @@ EXPORTS_DIR.mkdir(exist_ok=True)
 DATABASE_PATH = DATA_DIR / "sentinel.db"
 
 # Server config
-HOST = os.getenv("SENTINEL_HOST", "0.0.0.0")
+HOST = os.getenv("SENTINEL_HOST", "0.0.0.0")  # WARNING: Binds to all interfaces. Set to 127.0.0.1 for local-only access.
 PORT = int(os.getenv("SENTINEL_PORT", "8000"))
-DEBUG = os.getenv("SENTINEL_DEBUG", "true").lower() == "true"
+DEBUG = os.getenv("SENTINEL_DEBUG", "false").lower() == "true"
 
 # HTTP client settings
 HTTP_TIMEOUT = float(os.getenv("SENTINEL_HTTP_TIMEOUT", "10.0"))
+HTTP_TIMEOUT = max(HTTP_TIMEOUT, 1.0)  # Minimum 1s timeout
 MAX_RETRIES = int(os.getenv("SENTINEL_MAX_RETRIES", "3"))
+MAX_RETRIES = max(MAX_RETRIES, 1)  # Minimum 1 attempt
 
 # Worker settings
 WORKERS = int(os.getenv("SENTINEL_WORKERS", "1"))

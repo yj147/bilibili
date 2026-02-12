@@ -39,7 +39,7 @@ async def update_config(config_id: int, fields: dict):
             updates.append(f"{field} = ?")
             params.append(value)
     if not updates:
-        return None
+        return "no_valid_fields"
     params.append(config_id)
     await execute_query(
         f"UPDATE autoreply_config SET {', '.join(updates)} WHERE id = ?", tuple(params)
@@ -71,6 +71,8 @@ async def get_status():
 
 async def start_service(interval: int = 30):
     global _autoreply_running, _autoreply_task
+
+    interval = max(interval, 10)  # Minimum 10 seconds to prevent tight polling loop
 
     if _autoreply_running:
         return False  # already running

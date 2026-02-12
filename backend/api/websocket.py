@@ -4,6 +4,7 @@ WebSocket API for Real-time Log Streaming
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from typing import List
 import asyncio
+import hmac
 import json
 import os
 import time
@@ -41,7 +42,7 @@ async def websocket_logs(websocket: WebSocket):
     api_key = os.getenv("SENTINEL_API_KEY", "")
     if api_key:
         token = websocket.query_params.get("token", "")
-        if token != api_key:
+        if not token or not hmac.compare_digest(token, api_key):
             await websocket.close(code=4001, reason="Unauthorized")
             return
     await websocket.accept()

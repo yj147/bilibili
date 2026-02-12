@@ -8,8 +8,8 @@ from datetime import datetime
 
 class AccountBase(BaseModel):
     name: str = Field(..., min_length=1)
-    sessdata: str
-    bili_jct: str
+    sessdata: str = Field(..., min_length=1)
+    bili_jct: str = Field(..., min_length=1)
     buvid3: Optional[str] = ""
     buvid4: Optional[str] = ""
     dedeuserid_ckmd5: Optional[str] = ""
@@ -43,6 +43,34 @@ class Account(AccountBase):
 
     class Config:
         from_attributes = True
+
+
+class AccountPublic(BaseModel):
+    """Account model excluding sensitive credential fields."""
+    id: int
+    name: str
+    uid: Optional[int] = None
+    buvid3: Optional[str] = ""
+    buvid4: Optional[str] = ""
+    group_tag: Optional[str] = "default"
+    is_active: bool = True
+    last_check_at: Optional[datetime] = None
+    status: str = "unknown"
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AccountImport(BaseModel):
+    """Validated model for account import."""
+    name: str = Field(..., min_length=1)
+    sessdata: str = Field(..., min_length=1)
+    bili_jct: str = Field(..., min_length=1)
+    buvid3: Optional[str] = ""
+    buvid4: Optional[str] = ""
+    dedeuserid_ckmd5: Optional[str] = ""
+    group_tag: Optional[str] = "default"
 
 
 class AccountStatus(BaseModel):

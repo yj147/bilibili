@@ -6,6 +6,7 @@ from backend.config import USER_AGENTS
 from backend.logger import logger
 
 _UA = USER_AGENTS[5]  # Chrome Linux — consistent with config.py
+_SENSITIVE_FIELDS = {"sessdata", "bili_jct", "refresh_token", "dedeuserid_ckmd5"}
 
 
 async def _fetch_buvid(sessdata: str, bili_jct: str) -> dict:
@@ -122,7 +123,8 @@ async def qr_login_save(qrcode_key: str, account_name: str) -> dict:
                 )
             logger.info("[Auth] QR login updated existing account %d (uid=%s)", account_id, uid)
             rows = await execute_query("SELECT * FROM accounts WHERE id = ?", (account_id,))
-            return {"status_code": 0, "message": "登录成功（已更新）", "account": dict(rows[0])}
+            safe_account = {k: v for k, v in rows[0].items() if k not in _SENSITIVE_FIELDS}
+            return {"status_code": 0, "message": "登录成功（已更新）", "account": safe_account}
 
     from backend.services.account_service import create_account
     account = await create_account(
@@ -145,7 +147,8 @@ async def qr_login_save(qrcode_key: str, account_name: str) -> dict:
         )
     logger.info("[Auth] QR login created account %d (uid=%s)", account["id"], uid)
     rows = await execute_query("SELECT * FROM accounts WHERE id = ?", (account["id"],))
-    return {"status_code": 0, "message": "登录成功（新账号）", "account": dict(rows[0])}
+    safe_account = {k: v for k, v in rows[0].items() if k not in _SENSITIVE_FIELDS}
+    return {"status_code": 0, "message": "登录成功（新账号）", "account": safe_account}
 
 
 async def check_cookie_refresh_needed(account_id: int) -> dict:

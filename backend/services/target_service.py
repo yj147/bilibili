@@ -5,6 +5,8 @@ from backend.database import execute_query, execute_insert, execute_many
 # Whitelist of fields allowed in dynamic UPDATE statements
 ALLOWED_UPDATE_FIELDS = {"reason_id", "reason_content_id", "reason_text", "status"}
 
+VALID_STATUSES = {"pending", "processing", "completed", "failed"}
+
 
 async def list_targets(
     page: int = 1,
@@ -75,7 +77,7 @@ async def update_target(target_id: int, fields: dict):
             params.append(value)
 
     if not updates:
-        return None
+        return "no_valid_fields"
 
     updates.append("updated_at = datetime('now')")
     params.append(target_id)
@@ -96,6 +98,8 @@ async def delete_target(target_id: int) -> bool:
 
 
 async def delete_targets_by_status(status: str) -> int:
+    if status not in VALID_STATUSES:
+        raise ValueError(f"Invalid target status: {status}. Must be one of {VALID_STATUSES}")
     count_rows = await execute_query(
         "SELECT COUNT(*) as count FROM targets WHERE status = ?", (status,)
     )
@@ -105,6 +109,8 @@ async def delete_targets_by_status(status: str) -> int:
 
 
 async def update_target_status(target_id: int, status: str):
+    if status not in VALID_STATUSES:
+        raise ValueError(f"Invalid target status: {status}. Must be one of {VALID_STATUSES}")
     await execute_query(
         "UPDATE targets SET status = ?, updated_at = datetime('now') WHERE id = ?",
         (status, target_id),
@@ -112,6 +118,8 @@ async def update_target_status(target_id: int, status: str):
 
 
 async def increment_retry_and_set_status(target_id: int, status: str):
+    if status not in VALID_STATUSES:
+        raise ValueError(f"Invalid target status: {status}. Must be one of {VALID_STATUSES}")
     await execute_query(
         "UPDATE targets SET status = ?, updated_at = datetime('now'), retry_count = retry_count + 1 WHERE id = ?",
         (status, target_id),

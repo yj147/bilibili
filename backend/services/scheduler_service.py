@@ -245,6 +245,7 @@ def _register_job(task_row: dict):
         scheduler.remove_job(job_id)
     func = _JOB_FUNCTIONS.get(task_row["task_type"])
     if not func:
+        logger.warning("Unknown task_type '%s' for task #%d, skipping job registration", task_row["task_type"], task_row["id"])
         return
     if task_row.get("cron_expression"):
         trigger = CronTrigger.from_crontab(task_row["cron_expression"])
@@ -273,7 +274,8 @@ def _parse_config_json(row: dict) -> dict:
     if row.get("config_json"):
         try:
             row["config_json"] = json.loads(row["config_json"])
-        except (json.JSONDecodeError, TypeError):
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning("Failed to parse config_json for task #%s: %s", row.get("id"), e)
             row["config_json"] = None
     return row
 
@@ -316,7 +318,7 @@ async def update_task(task_id: int, fields: dict):
             updates.append(f"{field} = ?")
             params.append(value)
     if not updates:
-        return None
+        return "no_valid_fields"
     params.append(task_id)
     await execute_query(
         f"UPDATE scheduled_tasks SET {', '.join(updates)} WHERE id = ?", tuple(params)

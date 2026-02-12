@@ -1,5 +1,5 @@
 """Auto-Reply Configuration API Routes"""
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from typing import List
 
 from backend.models.task import AutoReplyConfig, AutoReplyConfigCreate, AutoReplyConfigUpdate, AutoReplyStatus
@@ -24,8 +24,10 @@ async def create_autoreply_config(config: AutoReplyConfigCreate):
 async def update_autoreply_config(config_id: int, config: AutoReplyConfigUpdate):
     """Update an auto-reply configuration."""
     result = await autoreply_service.update_config(config_id, config.model_dump(exclude_unset=True))
+    if result == "no_valid_fields":
+        raise HTTPException(status_code=400, detail="No valid fields to update")
     if result is None:
-        raise HTTPException(status_code=400, detail="No fields to update or config not found")
+        raise HTTPException(status_code=404, detail="Config not found")
     return result
 
 
@@ -44,7 +46,7 @@ async def get_autoreply_status():
 
 
 @router.post("/start")
-async def start_autoreply_service(interval: int = 30):
+async def start_autoreply_service(interval: int = Query(default=30, ge=10)):
     """Start the auto-reply polling service."""
     started = await autoreply_service.start_service(interval)
     if not started:

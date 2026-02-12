@@ -13,7 +13,7 @@ class ScheduledTaskBase(BaseModel):
     name: str
     task_type: TaskType
     cron_expression: Optional[str] = None
-    interval_seconds: Optional[int] = None
+    interval_seconds: Optional[int] = Field(None, ge=10)
     config_json: Optional[dict] = None
 
 
@@ -24,7 +24,7 @@ class ScheduledTaskCreate(ScheduledTaskBase):
 class ScheduledTaskUpdate(BaseModel):
     name: Optional[str] = None
     cron_expression: Optional[str] = None
-    interval_seconds: Optional[int] = None
+    interval_seconds: Optional[int] = Field(None, ge=10)
     is_active: Optional[bool] = None
     config_json: Optional[dict] = None
 

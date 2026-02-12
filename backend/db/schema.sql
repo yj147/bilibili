@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     group_tag TEXT DEFAULT 'default',
     is_active BOOLEAN DEFAULT 1,
     last_check_at DATETIME,
-    status TEXT DEFAULT 'unknown',
+    status TEXT DEFAULT 'unknown' CHECK (status IN ('unknown', 'valid', 'invalid', 'expiring')),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -78,8 +78,8 @@ CREATE TABLE IF NOT EXISTS system_config (
 );
 
 -- Default config values
-INSERT OR IGNORE INTO system_config (key, value) VALUES ('min_delay', '2.0');
-INSERT OR IGNORE INTO system_config (key, value) VALUES ('max_delay', '10.0');
+INSERT OR IGNORE INTO system_config (key, value) VALUES ('min_delay', '3.0');
+INSERT OR IGNORE INTO system_config (key, value) VALUES ('max_delay', '12.0');
 INSERT OR IGNORE INTO system_config (key, value) VALUES ('ua_rotation', 'true');
 INSERT OR IGNORE INTO system_config (key, value) VALUES ('auto_clean_logs', 'true');
 INSERT OR IGNORE INTO system_config (key, value) VALUES ('log_retention_days', '30');

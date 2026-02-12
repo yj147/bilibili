@@ -36,6 +36,43 @@ class TargetCreate(TargetBase):
                 )
         return v
 
+    @field_validator('identifier')
+    @classmethod
+    def validate_identifier_format(cls, v, info):
+        """Validate identifier format based on target type."""
+        target_type = info.data.get('type')
+        if target_type:
+            _validate_identifier(v, target_type)
+        return v
+
+
+def _validate_identifier(v: str, target_type: str) -> str:
+    """Shared identifier format validation for single and batch creation."""
+    if target_type == 'video':
+        if not v.startswith('BV') and not v.isdigit():
+            raise ValueError('Video identifier must be a BV number (e.g. BV1xx...) or numeric aid')
+    elif target_type == 'comment':
+        if ':' in v:
+            parts = v.split(':')
+            if len(parts) != 2:
+                raise ValueError('Comment identifier with ":" must be "oid:rpid" format')
+            try:
+                int(parts[0])
+                int(parts[1])
+            except ValueError:
+                raise ValueError('Comment identifier oid and rpid must be integers')
+        else:
+            try:
+                int(v)
+            except ValueError:
+                raise ValueError('Comment identifier must be integer rpid or "oid:rpid" format')
+    elif target_type == 'user':
+        try:
+            int(v)
+        except ValueError:
+            raise ValueError('User identifier must be a numeric uid')
+    return v
+
 
 class TargetBatchCreate(BaseModel):
     type: TargetType
@@ -43,6 +80,16 @@ class TargetBatchCreate(BaseModel):
     reason_id: Optional[int] = None
     reason_content_id: Optional[int] = None
     reason_text: Optional[str] = None
+
+    @field_validator('identifiers')
+    @classmethod
+    def validate_identifiers_format(cls, v, info):
+        """Validate each identifier format based on target type."""
+        target_type = info.data.get('type')
+        if target_type:
+            for identifier in v:
+                _validate_identifier(identifier, target_type)
+        return v
 
 
 class TargetUpdate(BaseModel):

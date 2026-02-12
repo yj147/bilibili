@@ -31,7 +31,7 @@ async def update_account(account_id: int, fields: dict):
             updates.append(f"{field} = ?")
             params.append(value)
     if not updates:
-        return None
+        return "no_valid_fields"
     params.append(account_id)
     await execute_query(f"UPDATE accounts SET {', '.join(updates)} WHERE id = ?", tuple(params))
     await invalidate_cache("active_accounts")
