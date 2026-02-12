@@ -200,6 +200,51 @@ Never build column names from user input without a whitelist. Always use `ALLOWE
 
 ---
 
+## Caching
+
+For high-frequency read queries, implement TTL-based caching to reduce database load:
+
+```python
+# In database.py
+_cache: dict[str, tuple[float, list[dict]]] = {}
+_cache_lock = asyncio.Lock()
+
+async def get_active_accounts_cached():
+    """Get active accounts with 60s TTL cache."""
+    cache_key = "active_accounts"
+    async with _cache_lock:
+        if cache_key in _cache:
+            expire_time, data = _cache[cache_key]
+            if time.time() < expire_time:
+                return data
+
+    result = await execute_query("SELECT * FROM accounts WHERE is_active = 1 AND status = 'valid'")
+
+    async with _cache_lock:
+        _cache[cache_key] = (time.time() + 60, result)
+    return result
+
+async def invalidate_cache(pattern: str):
+    """Invalidate cache entries matching pattern."""
+    async with _cache_lock:
+        keys_to_delete = [k for k in _cache.keys() if pattern in k]
+        for key in keys_to_delete:
+            del _cache[key]
+```
+
+**Cache invalidation**: Always invalidate cache when data changes:
+
+```python
+# In account_service.py
+async def update_account(account_id, fields):
+    await execute_query("UPDATE accounts SET ...", params)
+    await invalidate_cache("active_accounts")  # Clear cache
+```
+
+> **Best Practice**: Use short TTLs (60-300s) to balance performance and data freshness. Always invalidate on writes.
+
+---
+
 ## Concurrency
 
 - **Single worker required** (`--workers 1`). Enforced with warning in `main.py` lifespan.

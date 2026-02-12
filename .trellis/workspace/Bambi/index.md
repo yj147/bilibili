@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 7
-- **Last Active**: 2026-02-11
+- **Total Sessions**: 8
+- **Last Active**: 2026-02-12
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~308 | Active |
+| `journal-1.md` | ~379 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits |
 |---|------|-------|---------|
+| 8 | 2026-02-12 | 修复举报流程14个问题 + 性能优化 + 反检测增强 | `0bea9b2` |
 | 7 | 2026-02-11 | Session 7 — B站浅色主题重构 + UI极致美化 | `36fe735` |
 | 6 | 2026-02-10 | 全量自动化测试 115项 + 6个Bug修复 + Spec更新 | `ee86116` |
 | 5 | 2026-02-10 | PRD全量实现 + Spec更新 | `06693df`, `2b6a15c` |

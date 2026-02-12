@@ -125,15 +125,45 @@ async def _run_report_batch(task_id):
             await execute_single_report(target, account)  # Missing cooldown, retry, etc.
 ```
 
+### 12. Memory Management for Long-Running Services
+
+For services that maintain in-memory state (cooldowns, caches, tracking dicts), implement periodic cleanup to prevent memory leaks.
+
+```python
+# Good — periodic cleanup
+_account_last_report: dict[int, float] = {}
+
+def _cleanup_stale_cooldowns():
+    """Remove cooldown entries older than 1 hour."""
+    current_time = time.monotonic()
+    stale_threshold = 3600
+    stale_keys = [
+        account_id for account_id, last_ts in _account_last_report.items()
+        if current_time - last_ts > stale_threshold
+    ]
+    for key in stale_keys:
+        del _account_last_report[key]
+
+# Call cleanup periodically in hot paths
+_cleanup_stale_cooldowns()
+```
+
+> **Why**: Long-running services (auto-reply, report execution) can accumulate stale entries in tracking dictionaries. Without cleanup, memory usage grows unbounded over time.
+
 ### 10. Fire-and-Forget for Long-Running API Calls
 
 When an API endpoint triggers a long-running operation (e.g., batch reports), use `asyncio.create_task()` to run it in the background and return HTTP 202 immediately.
 
 ```python
-# Good — fire-and-forget
+# Good — fire-and-forget with error handling
 async def execute(target_id: int):
     await target_service.update_target_status(target_id, "processing")
-    asyncio.create_task(_run_report(target_id))  # Background
+    try:
+        asyncio.create_task(_run_report(target_id))
+    except Exception as e:
+        logger.error("Failed to create background task: %s", e)
+        await target_service.update_target_status(target_id, "pending")
+        raise HTTPException(status_code=500, detail="Failed to queue execution")
     return {"status": "accepted"}
 
 # Bad — blocks until complete (may timeout)
@@ -142,17 +172,32 @@ async def execute(target_id: int):
     return results
 ```
 
+> **Gotcha**: Always wrap `asyncio.create_task()` in try-except. If task creation fails after status update, the status becomes inconsistent (marked "processing" but no task running). Rollback the status on failure.
+
 ### 11. Comment Report Reason Validation
 
 B站 comment report API only supports `reason_id` values 1-9. Values 10+ (e.g., 11 = 涉政敏感) return error code 12012. Always validate before sending.
 
 ```python
-# In report_service.py
-VALID_COMMENT_REASONS = (1, 2, 3, 4, 5, 7, 8, 9)
+# In models/target.py - Pydantic validation
+VALID_COMMENT_REASONS = {1, 2, 3, 4, 5, 7, 8, 9}
+
+class TargetCreate(TargetBase):
+    @field_validator('reason_id')
+    @classmethod
+    def validate_comment_reason(cls, v, info):
+        if info.data.get('type') == 'comment' and v is not None:
+            if v not in VALID_COMMENT_REASONS:
+                raise ValueError(f'Invalid reason_id for comment: {v}')
+        return v
+
+# In report_service.py - Runtime fallback
 comment_reason = target.get("reason_id") or 4
-if comment_reason not in VALID_COMMENT_REASONS:
+if comment_reason not in (1, 2, 3, 4, 5, 7, 8, 9):
     comment_reason = 4  # fallback
 ```
+
+> **Best Practice**: Validate at both input (Pydantic) and runtime (service layer) for defense in depth.
 
 ---
 

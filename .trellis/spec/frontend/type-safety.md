@@ -29,12 +29,17 @@
 
 ## Keeping Types in Sync
 
-When backend schema changes:
+**Automated Sync (Recommended)**:
 1. Update Pydantic schema in `backend/models/`
-2. Mirror change in `frontend/src/lib/types.ts`
+2. Run `python3 scripts/sync-types.py` to auto-generate TypeScript types
+3. TypeScript compiler validates the generated types
+
+**Manual Sync (Legacy)**:
+1. Update Pydantic schema in `backend/models/`
+2. Manually mirror change in `frontend/src/lib/types.ts`
 3. TypeScript compiler flags mismatches
 
-> **Warning**: Types are manually synced. No auto-generation. Always verify both sides.
+> **Best Practice**: Use `scripts/sync-types.py` to automatically generate TypeScript interfaces from Pydantic models. This eliminates manual sync errors and ensures perfect type alignment between frontend and backend.
 
 ---
 
