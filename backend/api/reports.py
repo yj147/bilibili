@@ -1,6 +1,6 @@
 """Report Execution API Routes"""
 import asyncio
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from typing import List
 
 from backend.models.report import (
@@ -8,7 +8,8 @@ from backend.models.report import (
     ReportLog, ReportResult, BatchReportResult,
     CommentScanRequest, CommentScanResult,
 )
-from backend.services import report_service
+from backend.services import report_service, target_service
+from backend.database import execute_insert
 from backend.logger import logger
 
 router = APIRouter()
@@ -20,8 +21,11 @@ async def _run_report_in_background(target_id: int, account_ids: list[int] | Non
         await report_service.execute_report_for_target(target_id, account_ids)
     except Exception as e:
         logger.error("Background report execution failed for target %s: %s", target_id, e)
-        from backend.services import target_service
-        await target_service.increment_retry_and_set_status(target_id, "failed")
+        await target_service.update_target_status(target_id, "failed")
+        await execute_insert(
+            "INSERT INTO report_logs (target_id, action, success, error_message) VALUES (?, ?, ?, ?)",
+            (target_id, "background_task_crash", False, str(e))
+        )
 
 
 async def _run_batch_in_background(target_ids: list[int] | None, account_ids: list[int] | None):
@@ -58,11 +62,23 @@ async def execute_report(request: ReportExecuteRequest):
 @router.post("/execute/batch")
 async def execute_batch_reports(request: ReportBatchExecuteRequest):
     """Fire-and-forget: immediately returns, processes batch in background."""
+    task = None
     try:
-        asyncio.create_task(_run_batch_in_background(request.target_ids, request.account_ids))
+        task = asyncio.create_task(_run_batch_in_background(request.target_ids, request.account_ids))
     except Exception as e:
         logger.error("Failed to create batch background task: %s", e)
         raise HTTPException(status_code=500, detail="Failed to queue batch execution")
+
+    # Add exception handler to background task
+    def handle_task_exception(t):
+        try:
+            t.result()
+        except Exception as e:
+            logger.error("Background batch task failed: %s", e)
+
+    if task:
+        task.add_done_callback(handle_task_exception)
+
     return {"status": "accepted", "message": "Batch execution queued"}
 
 

@@ -4,6 +4,7 @@ import math
 import random
 import asyncio
 import time
+from fastapi import HTTPException
 from backend.core.wbi_sign import BilibiliSign
 from backend.core.bilibili_auth import BilibiliAuth
 from backend.config import HTTP_TIMEOUT, MAX_RETRIES, USER_AGENTS
@@ -116,17 +117,23 @@ class BilibiliClient:
                 # -352: Risk control — fail fast, don't block for 5 minutes
                 if code == -352:
                     logger.warning("[%s] Risk control (-352). Account flagged, skipping.", account_name)
-                    return res_json
+                    exc = HTTPException(status_code=400, detail=res_json.get("message", "风控检测"))
+                    exc.bilibili_code = -352
+                    raise exc
 
                 # -101: Not logged in — mark and stop retrying
                 if code == -101:
                     logger.error("[%s] Not logged in (-101). Account may be invalid.", account_name)
-                    return res_json
+                    exc = HTTPException(status_code=401, detail=res_json.get("message", "账号未登录"))
+                    exc.bilibili_code = -101
+                    raise exc
 
                 # -799: Human verification required — stop immediately
                 if code == -799:
                     logger.error("[%s] Human verification required (-799). Account flagged.", account_name)
-                    return res_json
+                    exc = HTTPException(status_code=403, detail=res_json.get("message", "需要人机验证"))
+                    exc.bilibili_code = -799
+                    raise exc
 
                 # 862/101: Other frequency limits
                 if code in (862, 101):

@@ -40,12 +40,27 @@ async def broadcast_log(log_type: str, message: str, data: dict = None):
 async def websocket_logs(websocket: WebSocket):
     """WebSocket endpoint for real-time log streaming."""
     api_key = os.getenv("SENTINEL_API_KEY", "")
+    token = None
+    subprotocol = None
+
     if api_key:
-        token = websocket.query_params.get("token", "")
-        if not token or not hmac.compare_digest(token, api_key):
+        # Extract token from Sec-WebSocket-Protocol header
+        for header_name, header_value in websocket.headers.items():
+            if header_name.lower() == "sec-websocket-protocol":
+                if header_value.startswith("token."):
+                    token = header_value[6:]  # Extract after "token."
+                    subprotocol = header_value
+                break
+
+        if not token:
+            await websocket.close(code=1008, reason="API key required")
+            return
+
+        if not hmac.compare_digest(token, api_key):
             await websocket.close(code=4001, reason="Unauthorized")
             return
-    await websocket.accept()
+
+    await websocket.accept(subprotocol=subprotocol)
     _clients.append(websocket)
     
     try:

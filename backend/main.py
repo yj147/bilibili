@@ -1,6 +1,7 @@
 """
 Bili-Sentinel FastAPI Application Entry Point
 """
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -45,7 +46,8 @@ async def lifespan(app: FastAPI):
     logger.info("Bili-Sentinel starting up...")
     import os as _os
     if not _os.getenv("SENTINEL_API_KEY", ""):
-        logger.warning("⚠ SENTINEL_API_KEY not set! All API routes are UNAUTHENTICATED. Set this in production!")
+        logger.error("FATAL: SENTINEL_API_KEY required but not set")
+        raise RuntimeError("SENTINEL_API_KEY required but not set")
     if (_os.cpu_count() or 1) > 1:
         logger.warning("Bili-Sentinel 必须以单 worker 模式运行 (--workers 1)")
     await init_db()
@@ -103,12 +105,13 @@ app = FastAPI(
 register_exception_handlers(app)
 
 # CORS for frontend
+ALLOWED_ORIGINS = os.getenv("SENTINEL_ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allow_headers=["Content-Type", "X-API-Key"],
 )
 
 # Include routers (auth on HTTP routers only, WebSocket handles its own auth)

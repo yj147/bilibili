@@ -19,6 +19,8 @@ async def list_targets(
     params = []
 
     if status:
+        if status not in VALID_STATUSES:
+            raise ValueError(f"Invalid status: {status}. Must be one of {VALID_STATUSES}")
         where_clauses.append("status = ?")
         params.append(status)
     if target_type:

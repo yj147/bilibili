@@ -22,8 +22,11 @@ async def list_targets(
     type: Optional[str] = None,
 ):
     """Get targets with pagination and filters."""
-    result = await target_service.list_targets(page, page_size, status, type)
-    return result
+    try:
+        result = await target_service.list_targets(page, page_size, status, type)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/", response_model=Target)

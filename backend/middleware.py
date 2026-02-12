@@ -14,9 +14,12 @@ def register_exception_handlers(app: FastAPI):
 
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+        content = {"error": True, "code": exc.status_code, "detail": str(exc.detail)}
+        if hasattr(exc, "bilibili_code"):
+            content["bilibili_code"] = exc.bilibili_code
         return JSONResponse(
             status_code=exc.status_code,
-            content={"error": True, "code": exc.status_code, "detail": str(exc.detail)},
+            content=content,
         )
 
     @app.exception_handler(RequestValidationError)

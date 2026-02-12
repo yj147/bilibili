@@ -101,3 +101,9 @@ CREATE INDEX IF NOT EXISTS idx_targets_type ON targets(type);
 CREATE INDEX IF NOT EXISTS idx_report_logs_target ON report_logs(target_id);
 CREATE INDEX IF NOT EXISTS idx_report_logs_account ON report_logs(account_id);
 CREATE INDEX IF NOT EXISTS idx_accounts_active ON accounts(is_active);
+
+-- 性能优化索引
+CREATE INDEX IF NOT EXISTS idx_targets_status_type ON targets(status, type);
+CREATE INDEX IF NOT EXISTS idx_report_logs_executed_at ON report_logs(executed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_targets_aid ON targets(aid) WHERE aid IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_targets_type_aid_status ON targets(type, aid, status);
