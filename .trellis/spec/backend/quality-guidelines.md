@@ -14,6 +14,97 @@
 
 ---
 
+## Security Patterns
+
+### Authentication Fail-Closed Design
+
+**Problem**: Fail-open authentication allows unauthorized access when configuration is missing.
+
+**Solution**: Raise errors when required security configuration is absent.
+
+```python
+# Good — fail-closed
+_API_KEY = os.getenv("SENTINEL_API_KEY", "")
+
+async def verify_api_key(request: Request):
+    if not _API_KEY:
+        raise HTTPException(status_code=500, detail="Server misconfiguration: SENTINEL_API_KEY not set")
+    # ... verify logic
+```
+
+**Why**: Missing API keys should halt the server, not silently allow all requests.
+
+### WebSocket Authentication via Subprotocol
+
+**Problem**: Passing API keys in WebSocket URLs leaks credentials in logs and browser history.
+
+**Solution**: Use `Sec-WebSocket-Protocol` header for authentication tokens.
+
+```python
+# Backend
+if api_key:
+    for header_name, header_value in websocket.headers.items():
+        if header_name.lower() == "sec-websocket-protocol":
+            if header_value.startswith("token."):
+                token = header_value[6:]
+                subprotocol = header_value
+            break
+    if not token:
+        await websocket.close(code=1008, reason="API key required")
+        return
+    if not hmac.compare_digest(token, api_key):
+        await websocket.close(code=4001, reason="Unauthorized")
+        return
+await websocket.accept(subprotocol=subprotocol)
+```
+
+```typescript
+// Frontend
+const ws = apiKey
+    ? new WebSocket(url, [`token.${apiKey}`])
+    : new WebSocket(url);
+```
+
+**Why**: Prevents credential leakage in server logs, browser DevTools, and proxy logs.
+
+### Fire-and-Forget Error Handling
+
+**Problem**: Background tasks created with `asyncio.create_task()` can fail silently, leaving entities stuck in "processing" state.
+
+**Solution**: Use defense-in-depth with both wrapper exception handling AND `done_callback`.
+
+```python
+# Good — wrapper exception handling
+async def _run_report_in_background(target_id: int, account_ids: list[int] | None):
+    try:
+        await report_service.execute_report_for_target(target_id, account_ids)
+    except Exception as e:
+        logger.error("Background report execution failed for target %s: %s", target_id, e)
+        await target_service.update_target_status(target_id, "failed")
+        await execute_insert(
+            "INSERT INTO report_logs (target_id, action, success, error_message) VALUES (?, ?, ?, ?)",
+            (target_id, "background_task_crash", False, str(e))
+        )
+
+# Good — done_callback for defense-in-depth
+task = asyncio.create_task(_run_report_in_background(target_id, account_ids))
+
+def handle_task_exception(t):
+    try:
+        t.result()
+    except Exception as e:
+        logger.error("Background report task failed for target %s: %s", target_id, e)
+
+task.add_done_callback(handle_task_exception)
+```
+
+**Why**:
+- Wrapper exception handling catches most failures
+- `done_callback` provides safety net for catastrophic failures before wrapper executes
+- Consistent pattern across all background tasks (single and batch execution)
+
+---
+
 ## Required Patterns
 
 ### 1. Thin API Routes
@@ -198,6 +289,86 @@ if comment_reason not in (1, 2, 3, 4, 5, 7, 8, 9):
 ```
 
 > **Best Practice**: Validate at both input (Pydantic) and runtime (service layer) for defense in depth.
+
+### 13. Sentinel Values for Ambiguous None Returns
+
+When a service function can return `None` for multiple reasons (no valid fields vs. record not found), use a sentinel string value to distinguish cases at the API layer.
+
+```python
+# Good — service returns sentinel value
+async def update_config(config_id: int, fields: dict):
+    updates = []
+    for field, value in fields.items():
+        if value is not None and field in ALLOWED_UPDATE_FIELDS:
+            updates.append(f"{field} = ?")
+    if not updates:
+        return "no_valid_fields"  # Sentinel value
+    # ... perform update ...
+    rows = await execute_query("SELECT * FROM table WHERE id = ?", (config_id,))
+    return rows[0] if rows else None  # None = not found
+
+# Good — API distinguishes cases
+result = await service.update_config(config_id, fields)
+if result == "no_valid_fields":
+    raise HTTPException(status_code=400, detail="No valid fields to update")
+if result is None:
+    raise HTTPException(status_code=404, detail="Config not found")
+return result
+
+# Bad — ambiguous None
+async def update_config(config_id: int, fields: dict):
+    if not updates:
+        return None  # Ambiguous: no fields or not found?
+    # ...
+    return rows[0] if rows else None
+```
+
+**Why**: Prevents API layer from guessing which error occurred. Clear distinction between client errors (400) and not found (404).
+
+### 14. Credential Filtering in API Responses
+
+Always filter sensitive fields from API responses, even for authenticated endpoints. Define a module-level set of sensitive field names and use dictionary comprehension to exclude them.
+
+```python
+# Good — filter sensitive fields
+_SENSITIVE_FIELDS = {"sessdata", "bili_jct", "refresh_token", "dedeuserid_ckmd5"}
+
+async def qr_login_save(qrcode_key: str, account_name: str):
+    # ... login logic ...
+    rows = await execute_query("SELECT * FROM accounts WHERE id = ?", (account_id,))
+    safe_account = {k: v for k, v in rows[0].items() if k not in _SENSITIVE_FIELDS}
+    return {"status_code": 0, "message": "登录成功", "account": safe_account}
+
+# Bad — returns full account with credentials
+async def qr_login_save(qrcode_key: str, account_name: str):
+    # ... login logic ...
+    rows = await execute_query("SELECT * FROM accounts WHERE id = ?", (account_id,))
+    return {"status_code": 0, "message": "登录成功", "account": rows[0]}
+```
+
+**Why**: Defense in depth. Even if the endpoint is authenticated, credentials should never be exposed in responses. Prevents accidental logging, caching, or client-side storage of sensitive data.
+
+**Pattern**: Use Pydantic response models (e.g., `AccountPublic`) for type safety, but also filter at service layer for operations that bypass Pydantic serialization.
+
+### 15. Input Validation with Query Constraints
+
+For query parameters that control resource usage (limit, page_size, etc.), always use FastAPI's `Query` validator with explicit bounds.
+
+```python
+# Good — bounded limit with validation
+@router.get("/history")
+async def get_history(limit: int = Query(default=50, ge=1, le=1000)):
+    return await service.get_history(limit)
+
+# Bad — unbounded limit
+@router.get("/history")
+async def get_history(limit: int = 50):
+    return await service.get_history(limit)  # Could be 999999999
+```
+
+**Why**: Prevents resource exhaustion attacks. Limits memory usage and database load. Provides clear API contract with validation errors (HTTP 422) for out-of-range values.
+
+**Convention**: Use `ge=1, le=1000` for most list endpoints. Adjust upper bound based on expected use cases.
 
 ---
 

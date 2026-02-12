@@ -411,13 +411,13 @@ export default function TargetsPage() {
                     <span className="text-xs text-muted-foreground">已尝试: {target.retry_count} 次</span>
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="ghost" size="icon" onClick={() => handleEdit(target)} className="h-8 w-8">
+                    <Button variant="ghost" size="icon" onClick={() => handleEdit(target)} className="h-8 w-8" aria-label="编辑目标">
                       <Pencil size={16} />
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleExecute(target.id)} disabled={executingId === target.id || target.status === 'processing'} className="h-8 w-8">
+                    <Button variant="ghost" size="icon" onClick={() => handleExecute(target.id)} disabled={executingId === target.id || target.status === 'processing'} className="h-8 w-8" aria-label="执行举报">
                       {executingId === target.id ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(target.id)} className="h-8 w-8 hover:text-red-500">
+                    <Button variant="ghost" size="icon" onClick={() => handleDelete(target.id)} className="h-8 w-8 hover:text-red-500" aria-label="删除目标">
                       <Trash2 size={16} />
                     </Button>
                   </div>

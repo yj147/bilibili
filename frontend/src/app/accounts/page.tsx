@@ -243,11 +243,14 @@ export default function AccountsPage() {
                 return (
                   <tr key={acc.id} className="hover:bg-muted/30 transition-colors group">
                     <td className="px-6 py-4 text-center">
-                      <div className={`w-2 h-2 rounded-full mx-auto ${
-                        acc.status === "valid" ? "bg-green-500" :
-                        acc.status === "expiring" ? "bg-yellow-500" :
-                        acc.status === "invalid" ? "bg-red-500" : "bg-zinc-400 animate-pulse"
-                      }`} />
+                      <div className="flex items-center justify-center gap-1">
+                        <div className={`w-2 h-2 rounded-full ${
+                          acc.status === "valid" ? "bg-green-500" :
+                          acc.status === "expiring" ? "bg-yellow-500" :
+                          acc.status === "invalid" ? "bg-red-500" : "bg-zinc-400 animate-pulse"
+                        }`} />
+                        <span className="sr-only">{sd.label}</span>
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
@@ -272,7 +275,7 @@ export default function AccountsPage() {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleEdit(acc)}
-                          title="编辑账号"
+                          aria-label="编辑账号"
                         >
                           <Pencil size={16} />
                         </Button>
@@ -281,7 +284,7 @@ export default function AccountsPage() {
                           size="icon"
                           onClick={() => handleCheck(acc.id)}
                           disabled={checkingId === acc.id}
-                          title="检测有效性"
+                          aria-label="检测有效性"
                         >
                           {checkingId === acc.id ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
                         </Button>
@@ -290,7 +293,7 @@ export default function AccountsPage() {
                           size="icon"
                           onClick={() => handleRefreshCookie(acc.id)}
                           disabled={refreshingId === acc.id}
-                          title="刷新 Cookie"
+                          aria-label="刷新 Cookie"
                         >
                           {refreshingId === acc.id ? <Loader2 size={16} className="animate-spin" /> : <Cookie size={16} />}
                         </Button>

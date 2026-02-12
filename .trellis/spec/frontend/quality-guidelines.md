@@ -48,6 +48,46 @@
 - **Status colors**: Green=active, Red=failed, Blue=connected, Yellow=warning
 - **Loading**: `animate-spin` on buttons, empty state messages in Chinese
 - **Language**: UI text in Chinese, code in English
+
+---
+
+## Accessibility (WCAG Level A)
+
+### Icon Button Labels
+
+**Problem**: Icon-only buttons are not accessible to screen readers.
+
+**Solution**: Add `aria-label` to all icon buttons.
+
+```tsx
+// Good — accessible icon button
+<Button
+  variant="ghost"
+  size="icon"
+  onClick={() => handleEdit(target)}
+  aria-label="编辑目标"
+>
+  <Pencil size={16} />
+</Button>
+```
+
+**Why**: Screen readers can announce button purpose to visually impaired users.
+
+### Color-Independent Status Indicators
+
+**Problem**: Status indicators that rely only on color fail WCAG guidelines and are inaccessible to colorblind users.
+
+**Solution**: Add screen-reader-only text alongside color indicators.
+
+```tsx
+// Good — color + text
+<div className="flex items-center justify-center gap-1">
+  <div className={`w-2 h-2 rounded-full ${statusColor}`} />
+  <span className="sr-only">{statusLabel}</span>
+</div>
+```
+
+**Why**: Provides status information through multiple channels (color + text), ensuring accessibility for all users.
 - **Confirmations**: shadcn AlertDialog via `useConfirm` hook (not native `confirm()`)
 - **Toasts**: sonner (`toast.success/error/warning` + `<Toaster richColors />`)
 

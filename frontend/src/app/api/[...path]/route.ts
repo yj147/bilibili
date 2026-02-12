@@ -2,9 +2,34 @@ import { NextRequest, NextResponse } from "next/server";
 
 const BACKEND_URL = "http://127.0.0.1:8000";
 
+const ALLOWED_PATHS = [
+  '/api/accounts',
+  '/api/targets',
+  '/api/reports',
+  '/api/autoreply',
+  '/api/scheduler',
+  '/api/config',
+  '/api/auth',
+  '/api/system',
+  '/health',
+];
+
 async function handler(req: NextRequest) {
   const url = new URL(req.url);
-  const targetUrl = `${BACKEND_URL}${url.pathname}${url.search}`;
+  const pathname = url.pathname;
+
+  // Validate path is in whitelist
+  const isAllowed = ALLOWED_PATHS.some(prefix => pathname.startsWith(prefix));
+  if (!isAllowed) {
+    return NextResponse.json(
+      { detail: "Path not allowed" },
+      { status: 403 }
+    );
+  }
+
+  // Normalize path to prevent traversal
+  const normalizedPath = pathname.replace(/\/\.\./g, '').replace(/\/\//g, '/');
+  const targetUrl = `${BACKEND_URL}${normalizedPath}${url.search}`;
 
   const headers = new Headers();
   req.headers.forEach((value, key) => {

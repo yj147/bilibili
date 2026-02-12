@@ -17,7 +17,11 @@ export function useAccounts() {
 
 export function useTargets(params: Record<string, string> = {}) {
   const query = new URLSearchParams(params).toString();
-  return useSWR<TargetListResponse>(`/targets/?${query}`, fetcher, { refreshInterval: 5000 });
+  return useSWR<TargetListResponse>(`/targets/?${query}`, fetcher, {
+    refreshInterval: 30000,
+    revalidateOnFocus: true,
+    dedupingInterval: 10000
+  });
 }
 
 export function useReportLogs(limit = 50) {
@@ -29,7 +33,11 @@ export function useAutoReplyConfigs() {
 }
 
 export function useAutoReplyStatus() {
-  return useSWR<AutoReplyStatus>('/autoreply/status', fetcher, { refreshInterval: 5000 });
+  return useSWR<AutoReplyStatus>('/autoreply/status', fetcher, {
+    refreshInterval: 30000,
+    revalidateOnFocus: true,
+    dedupingInterval: 10000
+  });
 }
 
 export function useSchedulerTasks() {

@@ -26,14 +26,27 @@ export function useLogStream(maxLogs = 100) {
 
   useEffect(() => {
     function connect() {
-      let url = getWsUrl();
+      const url = getWsUrl();
       const apiKey = process.env.NEXT_PUBLIC_API_KEY;
-      if (apiKey) url += `?token=${apiKey}`;
-      const ws = new WebSocket(url);
+      const ws = apiKey
+        ? new WebSocket(url, [`token.${apiKey}`])
+        : new WebSocket(url);
       wsRef.current = ws;
-      ws.onopen = () => setConnected(true);
+      ws.onopen = () => {
+        setConnected(true);
+        if (typeof window !== 'undefined') {
+          import('sonner').then(({ toast }) => {
+            toast.success('实时日志已连接');
+          });
+        }
+      };
       ws.onclose = () => {
         setConnected(false);
+        if (typeof window !== 'undefined') {
+          import('sonner').then(({ toast }) => {
+            toast.warning('实时日志连接断开，正在重连...');
+          });
+        }
         reconnectRef.current = setTimeout(connect, 3000);
       };
       ws.onmessage = (event) => {

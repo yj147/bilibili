@@ -41,13 +41,80 @@ export function useTargets(params: Record<string, string> = {}) {
 | Hook | Returns | Refresh |
 |------|---------|--------|
 | `useAccounts()` | `Account[]` | Every 30s |
-| `useTargets(params)` | `TargetListResponse` | On focus |
+| `useTargets(params)` | `TargetListResponse` | Every 30s |
 | `useReportLogs(limit)` | `ReportLog[]` | On focus |
 | `useAutoReplyConfigs()` | `AutoReplyConfig[]` | On focus |
 | `useAutoReplyStatus()` | `AutoReplyStatus` | Every 5s |
 | `useSchedulerTasks()` | `ScheduledTask[]` | On focus |
 | `useSchedulerHistory(limit)` | `ReportLog[]` | On focus |
 | `useConfigs()` | `Record<string, unknown>` | On focus |
+
+### Performance Optimization
+
+**Problem**: Excessive polling causes unnecessary API requests and backend load.
+
+**Solution**: Reduce polling frequency and add deduplication.
+
+```typescript
+// Good — optimized polling
+export function useTargets(params: Record<string, string> = {}) {
+  const query = new URLSearchParams(params).toString();
+  return useSWR<TargetListResponse>(`/targets/?${query}`, fetcher, {
+    refreshInterval: 30000,        // 30s instead of 5s
+    revalidateOnFocus: true,       // Still refresh on tab focus
+    dedupingInterval: 10000        // Dedupe requests within 10s
+  });
+}
+```
+
+**Why**: Reduces API requests by 80% while maintaining responsive UX through focus-based revalidation.
+
+---
+
+## WebSocket Hook (`lib/websocket.ts`)
+
+### Secure Authentication Pattern
+
+**Problem**: Passing API keys in WebSocket URLs leaks credentials in browser DevTools and logs.
+
+**Solution**: Use WebSocket subprotocol for authentication.
+
+```typescript
+// Good — subprotocol authentication
+const apiKey = process.env.NEXT_PUBLIC_API_KEY;
+const ws = apiKey
+    ? new WebSocket(url, [`token.${apiKey}`])
+    : new WebSocket(url);
+```
+
+**Why**: Credentials never appear in URL, preventing leakage in browser history and network logs.
+
+### User Feedback for Connection Status
+
+**Problem**: Users don't know when WebSocket disconnects, leading to confusion about missing real-time updates.
+
+**Solution**: Show toast notifications for connection events.
+
+```typescript
+ws.onopen = () => {
+    setConnected(true);
+    if (typeof window !== 'undefined') {
+        const { toast } = require('sonner');
+        toast.success('实时日志已连接');
+    }
+};
+
+ws.onclose = () => {
+    setConnected(false);
+    if (typeof window !== 'undefined') {
+        const { toast } = require('sonner');
+        toast.warning('实时日志连接断开，正在重连...');
+    }
+    reconnectRef.current = setTimeout(connect, 3000);
+};
+```
+
+**Why**: Provides immediate feedback about connection status, improving user confidence in real-time features.
 | `useSystemInfo()` | System info object | Every 30s |
 
 ### Refresh Intervals

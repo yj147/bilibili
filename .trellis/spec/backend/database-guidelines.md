@@ -14,6 +14,32 @@
 
 ---
 
+## Performance Optimization
+
+### Composite Indexes for High-Frequency Queries
+
+**Problem**: Queries filtering by multiple columns or sorting large result sets are slow without proper indexes.
+
+**Solution**: Create composite indexes matching query patterns.
+
+```sql
+-- High-frequency query patterns
+CREATE INDEX IF NOT EXISTS idx_targets_status_type ON targets(status, type);
+CREATE INDEX IF NOT EXISTS idx_report_logs_executed_at ON report_logs(executed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_targets_aid ON targets(aid) WHERE aid IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_targets_type_aid_status ON targets(type, aid, status);
+```
+
+**Why**: Composite indexes provide 10-100x performance improvement for filtered queries. Index column order matters: put equality filters first, then range/sort columns.
+
+**Index Design Rules**:
+- Match WHERE clause column order
+- Include sort columns (DESC/ASC) at the end
+- Use partial indexes (WHERE clause) for sparse columns
+- Avoid over-indexing (each index adds write overhead)
+
+---
+
 ## Connection Pattern
 
 All database access goes through three functions in `backend/database.py`:
