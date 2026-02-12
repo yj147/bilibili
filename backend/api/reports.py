@@ -48,13 +48,24 @@ async def execute_report(request: ReportExecuteRequest):
 
     # Update status and create task atomically with error handling
     await target_service.update_target_status(request.target_id, "processing")
+    task = None
     try:
-        asyncio.create_task(_run_report_in_background(request.target_id, request.account_ids))
+        task = asyncio.create_task(_run_report_in_background(request.target_id, request.account_ids))
     except Exception as e:
         # Rollback status if task creation fails
         logger.error("Failed to create background task for target %s: %s", request.target_id, e)
         await target_service.update_target_status(request.target_id, "pending")
         raise HTTPException(status_code=500, detail="Failed to queue report execution")
+
+    # Add exception handler to background task
+    def handle_task_exception(t):
+        try:
+            t.result()
+        except Exception as e:
+            logger.error("Background report task failed for target %s: %s", request.target_id, e)
+
+    if task:
+        task.add_done_callback(handle_task_exception)
 
     return {"status": "accepted", "target_id": request.target_id, "message": "Report queued for execution"}
 
