@@ -1,6 +1,6 @@
 """System Configuration Service"""
 import json
-from backend.database import execute_query, execute_insert
+from backend.database import execute_query, execute_insert, get_all_configs_cached, invalidate_cache
 
 
 async def get_config(key: str):
@@ -25,11 +25,12 @@ async def set_config(key: str, value):
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
         (key, serialized),
     )
+    await invalidate_cache("all_configs")
 
 
 async def get_all_configs():
     """Get all config key-value pairs."""
-    rows = await execute_query("SELECT key, value FROM system_config ORDER BY key")
+    rows = await get_all_configs_cached()
     result = {}
     for row in rows:
         raw = row["value"]

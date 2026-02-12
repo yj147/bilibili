@@ -1,13 +1,16 @@
 """
 Pydantic models for Target management
 """
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, Literal
 from datetime import datetime
 
 
 TargetType = Literal["video", "comment", "user"]
 TargetStatus = Literal["pending", "processing", "completed", "failed"]
+
+# Valid reason_id values for comment reports (B站评论举报API限制)
+VALID_COMMENT_REASONS = {1, 2, 3, 4, 5, 7, 8, 9}
 
 
 class TargetBase(BaseModel):
@@ -21,7 +24,17 @@ class TargetBase(BaseModel):
 
 
 class TargetCreate(TargetBase):
-    pass
+    @field_validator('reason_id')
+    @classmethod
+    def validate_comment_reason(cls, v, info):
+        """Validate reason_id for comment type targets."""
+        if info.data.get('type') == 'comment' and v is not None:
+            if v not in VALID_COMMENT_REASONS:
+                raise ValueError(
+                    f'Invalid reason_id for comment: {v}. '
+                    f'Must be one of {sorted(VALID_COMMENT_REASONS)}'
+                )
+        return v
 
 
 class TargetBatchCreate(BaseModel):

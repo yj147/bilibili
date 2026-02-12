@@ -4,6 +4,7 @@ Singleton connection with asyncio.Lock for concurrency safety.
 """
 import asyncio
 import aiosqlite
+import time
 from pathlib import Path
 from backend.config import DATABASE_PATH
 from backend.logger import logger
@@ -11,6 +12,10 @@ from backend.logger import logger
 _connection: aiosqlite.Connection | None = None
 _lock = asyncio.Lock()
 _db_initialized = False
+
+# Simple TTL cache
+_cache: dict[str, tuple[float, list[dict]]] = {}
+_cache_lock = asyncio.Lock()
 
 
 async def _get_connection() -> aiosqlite.Connection:
@@ -89,3 +94,52 @@ async def close_db():
         await _connection.close()
         _connection = None
         logger.info("Database connection closed")
+
+
+async def _get_cached(key: str, ttl: int) -> list[dict] | None:
+    """Get cached result if not expired."""
+    async with _cache_lock:
+        if key in _cache:
+            expire_time, data = _cache[key]
+            if time.time() < expire_time:
+                return data
+            del _cache[key]
+    return None
+
+
+async def _set_cache(key: str, data: list[dict], ttl: int):
+    """Set cache with TTL."""
+    async with _cache_lock:
+        _cache[key] = (time.time() + ttl, data)
+
+
+async def invalidate_cache(pattern: str):
+    """Invalidate cache entries matching pattern."""
+    async with _cache_lock:
+        keys_to_delete = [k for k in _cache.keys() if pattern in k]
+        for k in keys_to_delete:
+            del _cache[k]
+
+
+async def get_active_accounts_cached():
+    """Get active accounts with 60s cache."""
+    cache_key = "active_accounts"
+    cached = await _get_cached(cache_key, 60)
+    if cached is not None:
+        return cached
+
+    result = await execute_query("SELECT * FROM accounts WHERE is_active = 1 AND status = 'valid'")
+    await _set_cache(cache_key, result, 60)
+    return result
+
+
+async def get_all_configs_cached():
+    """Get all configs with 300s cache."""
+    cache_key = "all_configs"
+    cached = await _get_cached(cache_key, 300)
+    if cached is not None:
+        return cached
+
+    result = await execute_query("SELECT key, value FROM system_config ORDER BY key")
+    await _set_cache(cache_key, result, 300)
+    return result

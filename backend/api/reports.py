@@ -41,8 +41,17 @@ async def execute_report(request: ReportExecuteRequest):
         raise HTTPException(status_code=404, detail="Target not found")
     if target["status"] == "processing":
         raise HTTPException(status_code=409, detail="Target is already being processed")
+
+    # Update status and create task atomically with error handling
     await target_service.update_target_status(request.target_id, "processing")
-    asyncio.create_task(_run_report_in_background(request.target_id, request.account_ids))
+    try:
+        asyncio.create_task(_run_report_in_background(request.target_id, request.account_ids))
+    except Exception as e:
+        # Rollback status if task creation fails
+        logger.error("Failed to create background task for target %s: %s", request.target_id, e)
+        await target_service.update_target_status(request.target_id, "pending")
+        raise HTTPException(status_code=500, detail="Failed to queue report execution")
+
     return {"status": "accepted", "target_id": request.target_id, "message": "Report queued for execution"}
 
 

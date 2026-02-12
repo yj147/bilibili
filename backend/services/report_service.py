@@ -12,6 +12,19 @@ from backend.logger import logger
 # Track last report time per account for cooldown
 _account_last_report: dict[int, float] = {}
 
+def _cleanup_stale_cooldowns():
+    """Remove cooldown entries older than 1 hour to prevent memory leak."""
+    current_time = time.monotonic()
+    stale_threshold = 3600  # 1 hour
+    stale_keys = [
+        account_id for account_id, last_ts in _account_last_report.items()
+        if current_time - last_ts > stale_threshold
+    ]
+    for key in stale_keys:
+        del _account_last_report[key]
+    if stale_keys:
+        logger.debug("Cleaned up %d stale cooldown entries", len(stale_keys))
+
 
 async def execute_single_report(target: dict, account: dict) -> dict:
     """Execute a single report using one account. Returns a result dict."""
@@ -126,6 +139,13 @@ async def execute_report_for_target(target_id: int, account_ids: list[int] | Non
     if not target:
         return None, "Target not found"
 
+    # Circuit breaker: stop retrying if retry_count exceeds threshold
+    MAX_RETRY_COUNT = 3
+    if target.get("retry_count", 0) >= MAX_RETRY_COUNT:
+        logger.warning("Target %s exceeded max retry count (%d), marking as failed", target_id, MAX_RETRY_COUNT)
+        await target_service.update_target_status(target_id, "failed")
+        return None, f"Target exceeded max retry count ({MAX_RETRY_COUNT})"
+
     if account_ids:
         placeholders = ",".join("?" * len(account_ids))
         accounts = await execute_query(
@@ -148,6 +168,9 @@ async def execute_report_for_target(target_id: int, account_ids: list[int] | Non
     for account in accounts:
         max_rate_retries = 2
         for attempt in range(1 + max_rate_retries):
+            # Cleanup stale cooldown entries periodically
+            _cleanup_stale_cooldowns()
+
             # Account cooldown: wait if reported too recently
             last_ts = _account_last_report.get(account["id"], 0)
             elapsed = time.monotonic() - last_ts
@@ -184,7 +207,7 @@ async def execute_report_for_target(target_id: int, account_ids: list[int] | Non
 
 
 async def execute_batch_reports(target_ids: list[int] | None, account_ids: list[int] | None):
-    """Execute reports for multiple targets."""
+    """Execute reports for multiple targets with concurrency control."""
     from backend.services import target_service, account_service
 
     if target_ids:
@@ -210,47 +233,54 @@ async def execute_batch_reports(target_ids: list[int] | None, account_ids: list[
     if not accounts:
         return None, "No active accounts available"
 
-    all_results = []
-    shuffled_accounts = list(accounts)
-    for target in targets:
-        await target_service.update_target_status(target["id"], "processing")
-        random.shuffle(shuffled_accounts)
-        for account in shuffled_accounts:
-            max_rate_retries = 2
-            for attempt in range(1 + max_rate_retries):
-                last_ts = _account_last_report.get(account["id"], 0)
-                elapsed = time.monotonic() - last_ts
-                if elapsed < ACCOUNT_COOLDOWN:
-                    wait = ACCOUNT_COOLDOWN - elapsed + random.uniform(0, 5)
-                    logger.info("[%s] Account cooldown, waiting %.1fs...", account["name"], wait)
-                    await asyncio.sleep(wait)
+    semaphore = asyncio.Semaphore(5)
 
-                result = await execute_single_report(target, account)
-                _account_last_report[account["id"]] = time.monotonic()
+    async def process_target(target: dict) -> list[dict]:
+        """Process a single target with all accounts until success."""
+        async with semaphore:
+            await target_service.update_target_status(target["id"], "processing")
+            shuffled_accounts = list(accounts)
+            random.shuffle(shuffled_accounts)
 
-                resp = result.get("response") or {}
-                if resp.get("code") == 12019 and attempt < max_rate_retries:
-                    wait = 90 + random.uniform(0, 15)
-                    logger.info("[%s] Rate limited (12019), waiting %.0fs before retry %d...", account["name"], wait, attempt + 1)
-                    _account_last_report[account["id"]] = time.monotonic() + wait
-                    await asyncio.sleep(wait)
-                    continue
-                break
+            results = []
+            for account in shuffled_accounts:
+                max_rate_retries = 2
+                for attempt in range(1 + max_rate_retries):
+                    last_ts = _account_last_report.get(account["id"], 0)
+                    elapsed = time.monotonic() - last_ts
+                    if elapsed < ACCOUNT_COOLDOWN:
+                        wait = ACCOUNT_COOLDOWN - elapsed + random.uniform(0, 5)
+                        logger.info("[%s] Account cooldown, waiting %.1fs...", account["name"], wait)
+                        await asyncio.sleep(wait)
 
-            all_results.append(result)
+                    result = await execute_single_report(target, account)
+                    _account_last_report[account["id"]] = time.monotonic()
 
-            # Stop trying other accounts if this one succeeded
-            if result.get("success"):
-                break
+                    resp = result.get("response") or {}
+                    if resp.get("code") == 12019 and attempt < max_rate_retries:
+                        wait = 90 + random.uniform(0, 15)
+                        logger.info("[%s] Rate limited (12019), waiting %.0fs before retry %d...", account["name"], wait, attempt + 1)
+                        _account_last_report[account["id"]] = time.monotonic() + wait
+                        await asyncio.sleep(wait)
+                        continue
+                    break
 
-            await asyncio.sleep(_human_delay(MIN_DELAY, MAX_DELAY))
+                results.append(result)
 
-        any_success = any(r["success"] and r["target_id"] == target["id"] for r in all_results)
-        await target_service.update_target_status(
-            target["id"], "completed" if any_success else "failed"
-        )
-        # Extra delay between targets
-        await asyncio.sleep(_human_delay(MIN_DELAY * 2, MAX_DELAY * 2))
+                if result.get("success"):
+                    break
+
+                await asyncio.sleep(_human_delay(MIN_DELAY, MAX_DELAY))
+
+            any_success = any(r["success"] for r in results)
+            await target_service.update_target_status(
+                target["id"], "completed" if any_success else "failed"
+            )
+            return results
+
+    tasks = [process_target(target) for target in targets]
+    all_results_nested = await asyncio.gather(*tasks)
+    all_results = [r for results in all_results_nested for r in results]
 
     successful = sum(1 for r in all_results if r["success"])
     return {
@@ -284,6 +314,7 @@ async def scan_and_report_comments(
     errors: list[str] = []
     comments_found = 0
     targets_created = 0
+    targets_skipped = 0
     reports_executed = 0
     reports_successful = 0
     aid = 0
@@ -323,6 +354,15 @@ async def scan_and_report_comments(
             if not rpid:
                 continue
             try:
+                # Check if target already exists
+                existing = await execute_query(
+                    "SELECT id FROM targets WHERE type = 'comment' AND identifier = ?",
+                    (str(rpid),)
+                )
+                if existing:
+                    targets_skipped += 1
+                    continue
+
                 comment_text = reply.get("content", {}).get("message", "")
                 display = comment_text[:30] if comment_text else None
                 await target_service.create_target(
@@ -337,7 +377,7 @@ async def scan_and_report_comments(
             except Exception as e:
                 errors.append(f"Create target rpid={rpid}: {e}")
 
-        await broadcast_log("scan", f"Created {targets_created} targets from {comments_found} comments")
+        await broadcast_log("scan", f"Created {targets_created} targets from {comments_found} comments (skipped {targets_skipped} duplicates)")
 
         # Step 4: Optionally auto-report
         if auto_report and targets_created > 0:
@@ -363,6 +403,7 @@ async def scan_and_report_comments(
         "aid": aid,
         "comments_found": comments_found,
         "targets_created": targets_created,
+        "targets_skipped": targets_skipped,
         "reports_executed": reports_executed,
         "reports_successful": reports_successful,
         "errors": errors,

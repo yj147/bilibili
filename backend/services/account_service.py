@@ -1,5 +1,5 @@
 """Account business logic."""
-from backend.database import execute_query, execute_insert
+from backend.database import execute_query, execute_insert, get_active_accounts_cached, invalidate_cache
 from backend.logger import logger
 
 ALLOWED_UPDATE_FIELDS = {"name", "sessdata", "bili_jct", "buvid3", "buvid4", "dedeuserid_ckmd5", "refresh_token", "group_tag", "is_active"}
@@ -19,6 +19,7 @@ async def create_account(name, sessdata, bili_jct, buvid3="", buvid4="", dedeuse
         "INSERT INTO accounts (name, sessdata, bili_jct, buvid3, buvid4, dedeuserid_ckmd5, group_tag) VALUES (?, ?, ?, ?, ?, ?, ?)",
         (name, sessdata, bili_jct, buvid3, buvid4, dedeuserid_ckmd5, group_tag)
     )
+    await invalidate_cache("active_accounts")
     rows = await execute_query("SELECT * FROM accounts WHERE id = ?", (account_id,))
     return rows[0]
 
@@ -33,6 +34,7 @@ async def update_account(account_id: int, fields: dict):
         return None
     params.append(account_id)
     await execute_query(f"UPDATE accounts SET {', '.join(updates)} WHERE id = ?", tuple(params))
+    await invalidate_cache("active_accounts")
     rows = await execute_query("SELECT * FROM accounts WHERE id = ?", (account_id,))
     return rows[0] if rows else None
 
@@ -42,11 +44,12 @@ async def delete_account(account_id: int):
     if not rows:
         return False
     await execute_query("DELETE FROM accounts WHERE id = ?", (account_id,))
+    await invalidate_cache("active_accounts")
     return True
 
 
 async def get_active_accounts():
-    return await execute_query("SELECT * FROM accounts WHERE is_active = 1 AND status = 'valid'")
+    return await get_active_accounts_cached()
 
 
 async def export_accounts(include_credentials: bool = False):
@@ -108,4 +111,5 @@ async def check_account_validity(account_id: int):
     status = "valid" if is_valid else "invalid"
     await execute_query("UPDATE accounts SET status = ?, uid = ?, last_check_at = datetime('now') WHERE id = ?",
         (status, uid, account_id))
+    await invalidate_cache("active_accounts")
     return {"id": account_id, "name": account["name"], "status": status, "is_valid": is_valid, "uid": uid}

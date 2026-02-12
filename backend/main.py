@@ -12,6 +12,31 @@ from backend.auth import verify_api_key
 from backend.api import accounts, targets, reports, autoreply, scheduler, websocket, config, auth
 
 
+async def _background_wbi_refresh():
+    """Background task to refresh WBI keys every hour."""
+    import asyncio
+    from backend.core.bilibili_auth import BilibiliAuth
+    from backend.database import execute_query
+
+    while True:
+        try:
+            await asyncio.sleep(3600)  # 1 hour
+            accounts = await execute_query("SELECT * FROM accounts WHERE is_active = 1 LIMIT 1")
+            if accounts:
+                auth = BilibiliAuth.from_db_account(accounts[0])
+                if await auth.refresh_wbi_keys():
+                    logger.info("Background WBI keys refresh succeeded")
+                else:
+                    logger.warning("Background WBI keys refresh failed")
+            else:
+                logger.debug("No active accounts for background WBI refresh")
+        except asyncio.CancelledError:
+            logger.info("Background WBI refresh task cancelled")
+            raise
+        except Exception as e:
+            logger.error("Background WBI refresh error: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan: startup and shutdown."""
@@ -42,11 +67,21 @@ async def lifespan(app: FastAPI):
             logger.warning("WBI keys refresh failed on startup")
     else:
         logger.warning("No active accounts for WBI key refresh")
+
+    # Start background WBI refresh task
+    import asyncio
+    _wbi_task = asyncio.create_task(_background_wbi_refresh())
+
     from backend.services.scheduler_service import start_scheduler, stop_scheduler
     await start_scheduler()
     logger.info("Scheduler started")
     yield
     # Shutdown
+    _wbi_task.cancel()
+    try:
+        await _wbi_task
+    except asyncio.CancelledError:
+        pass
     stop_scheduler()
     await close_db()
     logger.info("Bili-Sentinel shutting down...")

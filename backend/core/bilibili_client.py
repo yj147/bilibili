@@ -25,12 +25,41 @@ class BilibiliClient:
         self.auth = auth
         self.account_index = account_index
         self.cookies = auth.get_cookies(account_index)
+
+        # Anti-detection: randomize request fingerprint
+        ua = random.choice(USER_AGENTS)
+
+        # Randomize Accept-Encoding combinations
+        encodings = ["gzip", "deflate", "br"]
+        random.shuffle(encodings)
+        accept_encoding = ", ".join(encodings[:random.randint(2, 3)])
+
+        # Extract platform from UA for Sec-Ch-Ua-Platform
+        if "Windows" in ua:
+            platform = '"Windows"'
+        elif "Macintosh" in ua:
+            platform = '"macOS"'
+        elif "Linux" in ua or "X11" in ua:
+            platform = '"Linux"'
+        else:
+            platform = '"Windows"'
+
+        # Generate random Chrome version for Sec-Ch-Ua (129-131 range)
+        chrome_version = random.randint(129, 131)
+        sec_ch_ua = f'"Chromium";v="{chrome_version}", "Not_A Brand";v="24"'
+
         self.headers = {
-            "User-Agent": random.choice(USER_AGENTS),
+            "User-Agent": ua,
             "Referer": "https://www.bilibili.com/",
             "Origin": "https://www.bilibili.com",
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "Accept-Encoding": accept_encoding,
+            "Connection": "keep-alive",
+            "DNT": str(random.randint(0, 1)),
+            "Sec-Ch-Ua": sec_ch_ua,
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": platform,
             "Sec-Fetch-Dest": "empty",
             "Sec-Fetch-Mode": "cors",
             "Sec-Fetch-Site": "same-site",
@@ -169,7 +198,9 @@ class BilibiliClient:
         bili_jct = self.cookies.get("bili_jct", "")
         data["csrf"] = bili_jct
 
-        cookie_parts = [f"{k}={v}" for k, v in self.cookies.items()]
+        # Properly escape cookie values to handle special characters
+        from urllib.parse import quote
+        cookie_parts = [f"{k}={quote(str(v), safe='')}" for k, v in self.cookies.items()]
         cookie_header = "; ".join(cookie_parts)
 
         headers = {
@@ -195,11 +226,10 @@ class BilibiliClient:
                     logger.warning("[%s] Rate limited (-412). Backoff %.1fs...", account_name, wait_time)
                     await asyncio.sleep(wait_time)
                     continue
+                # -352: Risk control — fail fast, don't block for 5 minutes
                 if code == -352:
-                    wait_time = 300 + random.uniform(0, 60)
-                    logger.warning("[%s] Risk control (-352). Waiting %.0fs...", account_name, wait_time)
-                    await asyncio.sleep(wait_time)
-                    continue
+                    logger.warning("[%s] Risk control (-352). Account flagged, skipping.", account_name)
+                    return res_json
 
                 return res_json
             except (httpx.TimeoutException, httpx.ConnectError, httpx.ReadError) as e:
