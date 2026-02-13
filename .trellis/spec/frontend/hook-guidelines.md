@@ -42,6 +42,7 @@ export function useTargets(params: Record<string, string> = {}) {
 |------|---------|--------|
 | `useAccounts()` | `Account[]` | Every 30s |
 | `useTargets(params)` | `TargetListResponse` | Every 30s |
+| `useTargetStats()` | `TargetStatsResponse` | Every 30s |
 | `useReportLogs(limit)` | `ReportLog[]` | On focus |
 | `useAutoReplyConfigs()` | `AutoReplyConfig[]` | On focus |
 | `useAutoReplyStatus()` | `AutoReplyStatus` | Every 5s |
@@ -205,8 +206,11 @@ interface LogEntry {
   message: string;
   data: Record<string, unknown>;
   timestamp: number;
+  id?: number;       // Database log ID for deduplication with API logs
 }
 ```
+
+> **Note**: The `id` field enables reliable ID-based deduplication when merging WebSocket logs with API-fetched historical logs. See `state-management.md` for the dedup pattern.
 
 ---
 

@@ -30,10 +30,8 @@ class BilibiliClient:
         # Anti-detection: randomize request fingerprint
         ua = random.choice(USER_AGENTS)
 
-        # Randomize Accept-Encoding combinations
-        encodings = ["gzip", "deflate", "br"]
-        random.shuffle(encodings)
-        accept_encoding = ", ".join(encodings[:random.randint(2, 3)])
+        # Accept-Encoding: gzip/deflate only (br excluded: no brotli decoder)
+        accept_encoding = "gzip, deflate"
 
         # Extract platform from UA for Sec-Ch-Ua-Platform
         if "Windows" in ua:
@@ -103,8 +101,26 @@ class BilibiliClient:
                     resp = await self._client.post(url, params=params, data=data)
                 else:
                     resp = await self._client.get(url, params=params)
-                
-                res_json = resp.json()
+
+                # Debug: log response details before parsing
+                logger.debug("[%s] Response status: %s, content-type: %s, content-length: %s",
+                            account_name, resp.status_code,
+                            resp.headers.get("content-type"),
+                            resp.headers.get("content-length"))
+
+                # Check if response is empty or not JSON
+                if not resp.content:
+                    logger.error("[%s] Empty response from %s", account_name, url)
+                    return {"code": -999, "message": "Empty response from server"}
+
+                try:
+                    res_json = resp.json()
+                except Exception as json_err:
+                    logger.error("[%s] JSON parse error from %s: %s",
+                                account_name, url, json_err)
+                    logger.debug("[%s] Response preview: %s", account_name, resp.text[:200])
+                    return {"code": -999, "message": f"Invalid JSON response: {json_err}"}
+
                 code = res_json.get("code")
 
                 # -412: Too many requests — exponential backoff
@@ -287,6 +303,7 @@ class BilibiliClient:
 
     async def send_private_message(self, receiver_id: int, content: str):
         """Sends a private message to a user."""
+        # NOTE: send_msg uses web_im — no session_svr equivalent exists (verified 2026-02)
         url = "https://api.vc.bilibili.com/web_im/v1/web_im/send_msg"
         data = {
             "msg[sender_uid]": self.auth.accounts[self.account_index].get("uid", 0), # Optional if cookies are valid
@@ -302,10 +319,13 @@ class BilibiliClient:
 
     async def get_recent_sessions(self):
         """Fetches recent private message sessions."""
-        url = "https://api.vc.bilibili.com/web_im/v1/web_im/get_sessions"
+        url = "https://api.vc.bilibili.com/session_svr/v1/session_svr/get_sessions"
         params = {
+            "session_type": 1,
+            "group_fold": 1,
+            "unfollow_fold": 0,
+            "sort_rule": 2,
+            "build": 0,
             "mobi_app": "web",
-            "page_size": 20,
-            "last_ts": int(time.time() * 1000)
         }
         return await self._get(url, params=params)

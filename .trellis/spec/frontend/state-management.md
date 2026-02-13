@@ -55,6 +55,67 @@ const { logs, connected } = useLogStream(50);
 
 ---
 
+## useReducer for Complex State
+
+When a component has 3+ related boolean/modal states, consolidate into `useReducer`:
+
+```typescript
+// Good — single reducer for related state
+type ModalState = {
+  showAdd: boolean; showEdit: boolean;
+  editingTarget: TargetType | null;
+};
+
+type ModalAction =
+  | { type: "OPEN_ADD" }
+  | { type: "CLOSE_ADD" }
+  | { type: "OPEN_EDIT"; target: TargetType }
+  | { type: "CLOSE_EDIT" };
+
+const [modal, dispatch] = useReducer(modalReducer, initialState);
+
+// Bad — multiple useState for related state
+const [showAdd, setShowAdd] = useState(false);
+const [showEdit, setShowEdit] = useState(false);
+const [editingTarget, setEditingTarget] = useState<TargetType | null>(null);
+```
+
+**When to use**: 3+ related booleans, or state transitions that must be atomic (e.g., opening edit modal must also set the editing target).
+
+**Pattern**: Also applies to loading states — use `Set<number>` in reducer when tracking concurrent operations per item:
+
+```typescript
+type LoadingState = {
+  checking: Set<number>;
+  refreshing: Set<number>;
+};
+```
+
+---
+
+## ID-Based Deduplication for Merged Data
+
+When merging WebSocket real-time data with API historical data, use ID-based Set lookup instead of time-window comparison:
+
+```typescript
+// Good — ID-based dedup (reliable)
+const wsLogIds = new Set(wsLogs.filter(l => l.id > 0).map(l => l.id));
+const merged = [
+  ...wsLogs,
+  ...apiLogs.filter(l => !wsLogIds.has(l.id)),
+].slice(0, 50);
+
+// Bad — time-window dedup (unreliable with clock drift)
+const TWO_SEC = 2000;
+const merged = [...wsLogs, ...apiLogs.filter(al =>
+  !wsLogs.some(wl => Math.abs(wl.timestamp - al.timestamp) < TWO_SEC)
+)];
+```
+
+**Why**: Time-based comparison fails with clock differences between server and client, or when multiple events share similar timestamps.
+
+---
+
 ## What NOT to Do
 
 1. **Don't add a global store** — SWR + useState is sufficient

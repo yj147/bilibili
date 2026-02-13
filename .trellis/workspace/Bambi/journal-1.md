@@ -751,3 +751,163 @@ Browser E2E + API自动化测试全覆盖，修复6个bug，更新spec文档
 ### Next Steps
 
 - None - task complete
+
+## Session 13: 自动回复模块深度修复 (15个问题) + 可选认证修复
+
+**Date**: 2026-02-13
+**Task**: 自动回复模块深度修复 (15个问题) + 可选认证修复
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 修复内容
+
+### P0 问题（3项）
+- 回复失败状态管理：只在发送成功时更新 last_msg_ts
+- 冲突检测逻辑：使用 task_type 而非字符串匹配
+- 默认回复竞态：原子 upsert 操作
+
+### P1 问题（7项）
+- render 期间 setState：移到 useEffect
+- SWR 缓存刷新：保存后调用 mutate()
+- 前后端类型契约：统一字段定义
+- 错误反馈：完整 try-catch + toast 显示
+- 活跃账号筛选：统一调用 account_service
+- 规则匹配稳定性：添加 id ASC 次要排序
+- API 语义：重命名为 /enable 和 /disable
+
+### P2 问题（5项）
+- last_poll_at 显示：UI 添加轮询时间展示
+- 日志时区标记：统一 ISO UTC 格式
+- 轮询参数配置化：移到 config.py
+- 专项测试：新增 28 个集成测试
+- 文件边界：提取 autoreply_polling.py 模块
+
+### API 认证修复
+- 移除错误的强制 SENTINEL_API_KEY 检查
+- backend/main.py: 移除启动时的强制检查
+- backend/auth.py: 改为可选认证（未设置时跳过）
+
+### 规范文档更新
+- 更新 .trellis/spec/backend/error-handling.md
+- 添加可选认证设计的 Gotcha 章节
+
+## 测试结果
+- 后端测试：28/28 通过
+- 前端 Lint：通过
+- 总计：49+ 测试通过
+
+## 修改文件
+- 29 个文件修改，+797/-283 行
+- 5 个新文件，+778 行
+- 新增测试文件：autoreply_polling.py、test_account_service.py、test_autoreply_integration.py、test_autoreply_service.py、datetime.ts
+
+## 验证
+- 后端 API 正常运行
+- 自动回复功能正常（is_running: true, active_accounts: 7）
+- 前端开发服务器正常运行
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `dce8482` | (see git log) |
+| `bc8677a` | (see git log) |
+| `dd505fd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+## Session 14: React性能优化 + 并发安全修复 + Spec更新
+
+**Date**: 2026-02-13
+**Task**: React性能优化 + 并发安全修复 + Spec更新
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 变更概览
+
+| 类别 | 变更 |
+|------|------|
+| 前端优化 | targets/page.tsx 拆分为4个子组件 (735→320行) |
+| 状态管理 | 使用useReducer整合modal状态 (7个useState→1个) |
+| 状态管理 | accounts/page.tsx loading状态整合为useReducer |
+| 数据获取 | 添加useTargetStats SWR hook |
+| 日志去重 | dashboard日志合并改用ID-based Set去重 |
+| 后端并发 | bilibili_auth.py WBI刷新添加asyncio.Lock保护 |
+| 后端安全 | report_service.py cooldown字典迭代使用list()防竞态 |
+| WebSocket | broadcast_log添加log_id字段支持前端去重 |
+| 工具 | sync-types.py添加类型验证 (循环依赖/缺失模型) |
+| 文档 | CLAUDE.md schemas/→models/ 路径修正 |
+
+## 修改文件
+
+**前端** (8 files):
+- `frontend/src/app/targets/page.tsx` — 主页面精简至320行
+- `frontend/src/app/targets/components/TargetStats.tsx` — 统计卡片组件
+- `frontend/src/app/targets/components/TargetFilters.tsx` — 搜索筛选组件
+- `frontend/src/app/targets/components/TargetList.tsx` — 目标列表组件
+- `frontend/src/app/targets/components/TargetModals.tsx` — 模态框组件
+- `frontend/src/app/targets/hooks/useTargetStats.ts` — 统计SWR hook
+- `frontend/src/app/accounts/page.tsx` — useReducer重构
+- `frontend/src/app/page.tsx` — ID-based日志去重
+- `frontend/src/lib/swr.ts` — 添加useTargetStats
+- `frontend/src/lib/websocket.ts` — LogEntry添加id字段
+
+**后端** (3 files):
+- `backend/core/bilibili_auth.py` — asyncio.Lock WBI保护
+- `backend/services/report_service.py` — dict迭代安全修复
+- `backend/api/websocket.py` — log_id广播支持
+
+**工具/文档** (2 files):
+- `scripts/sync-types.py` — 类型验证功能
+- `CLAUDE.md` — 路径修正
+
+## Spec 更新
+
+- `frontend/state-management.md` — useReducer模式 + ID-based去重模式
+- `frontend/component-guidelines.md` — 大页面拆分规范
+- `frontend/hook-guidelines.md` — useTargetStats + LogEntry.id
+- `backend/quality-guidelines.md` — dict迭代安全 + asyncio.Lock双重检查
+- `guides/cross-layer-thinking-guide.md` — 实时日志去重跨层案例
+
+## 发现的模式
+
+1. **useReducer阈值**: 3+个相关boolean/modal状态时应整合
+2. **ID-based去重**: 跨数据源合并时优于时间窗口比较
+3. **asyncio.Lock + double-check**: 共享资源保护的标准模式
+4. **list()包装dict迭代**: asyncio环境下防止字典大小变化异常
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7e73395` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

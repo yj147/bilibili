@@ -77,6 +77,39 @@ import { cn } from "@/lib/utils";
 
 ---
 
+## Component Splitting for Large Pages
+
+When a page component exceeds ~300 lines, split into sub-components:
+
+```
+app/{feature}/
+├── page.tsx                    # Main page (state + handlers + layout)
+├── components/
+│   ├── FeatureStats.tsx        # Stats/summary cards
+│   ├── FeatureFilters.tsx      # Search + filter controls
+│   ├── FeatureList.tsx         # Main data list/table
+│   └── FeatureModals.tsx       # All modal dialogs
+└── hooks/
+    └── useFeatureStats.ts      # Feature-specific SWR hooks
+```
+
+**Rules**:
+- Page component owns all state and handlers
+- Sub-components receive data and callbacks via props
+- Modals grouped in one file (they share form patterns)
+- Feature-specific hooks go in `hooks/` directory
+
+**Example** (`targets/page.tsx` refactor: 735 → 320 lines):
+```tsx
+// page.tsx — orchestrator only
+<TargetStats total={stats.total} pending={stats.pending} />
+<TargetFilters searchKeyword={searchKeyword} onSearchChange={...} />
+<TargetList targets={targets} onEdit={handleEdit} onDelete={handleDelete} />
+<AddModal open={modal.showAdd} onSubmit={handleAdd} />
+```
+
+---
+
 ## Common Mistakes
 
 1. **Forgetting "use client"** — SWR hooks require it

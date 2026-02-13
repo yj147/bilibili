@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 12
+- **Total Sessions**: 14
 - **Last Active**: 2026-02-13
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~753 | Active |
+| `journal-1.md` | ~913 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,8 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits |
 |---|------|-------|---------|
+| 14 | 2026-02-13 | React性能优化 + 并发安全修复 + Spec更新 | `7e73395` |
+| 13 | 2026-02-13 | 自动回复模块深度修复 (15个问题) + 可选认证修复 | `dce8482`, `bc8677a`, `dd505fd` |
 | 12 | 2026-02-13 | Session 11: 账号生命周期修复 + 前端功能增强 + 规范文档更新 | `92ab4f7`, `f1931a2` |
 | 11 | 2026-02-12 | 前后端集成安全、性能、UX 修复 | `2f9cfc8` |
 | 10 | 2026-02-12 | Session 10: Variant漏洞修复完成 (V-09, V-12 + 一致性修复) | `7ee2a2a`, `9fcf220` |

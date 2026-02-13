@@ -95,6 +95,41 @@ Create detailed flow docs when:
 
 ---
 
+## Case Study: Real-Time Log Deduplication (Cross-Layer)
+
+This pattern spans backend WebSocket → frontend merge logic:
+
+```
+Backend broadcast_log(log_id) → WebSocket → Frontend useLogStream
+                                              ↓
+Backend GET /api/reports/logs → SWR → Frontend useReportLogs
+                                              ↓
+                                    Merge with ID-based dedup
+```
+
+### The Problem
+
+Dashboard shows both real-time WebSocket logs and API-fetched historical logs. Without deduplication, the same log entry appears twice (once from WS, once from API).
+
+### Why Time-Based Dedup Failed
+
+Initial approach used 2-second time windows — unreliable because:
+- Server timestamps (Python `time.time()`) vs client timestamps (JS `Date.now()`) can drift
+- Multiple events within the same second create false matches/misses
+
+### Solution: ID-Based Dedup
+
+1. **Backend**: `broadcast_log()` includes `log_id` (database row ID) in WebSocket messages
+2. **Frontend**: `LogEntry` type includes optional `id` field
+3. **Merge**: Use `Set<number>` for O(1) lookup to filter API logs already present in WS logs
+
+### Gotchas
+
+- WS logs created before DB insert may have `id = 0` — filter these from the dedup set
+- Always put WS logs first (they're more recent), then fill with API logs
+
+---
+
 ## Case Study: QR Login Flow (Cross-Layer)
 
 This feature spans 4 layers:

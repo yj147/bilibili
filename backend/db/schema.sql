@@ -88,7 +88,7 @@ INSERT OR IGNORE INTO system_config (key, value) VALUES ('notify_level', 'error'
 INSERT OR IGNORE INTO system_config (key, value) VALUES ('autoreply_poll_interval_seconds', '30');
 INSERT OR IGNORE INTO system_config (key, value) VALUES ('autoreply_poll_min_interval_seconds', '10');
 INSERT OR IGNORE INTO system_config (key, value) VALUES ('autoreply_account_batch_size', '0');
-INSERT OR IGNORE INTO system_config (key, value) VALUES ('autoreply_session_batch_size', '0');
+INSERT OR IGNORE INTO system_config (key, value) VALUES ('autoreply_session_batch_size', '5');
 
 -- Auto-reply state (dedup tracking)
 CREATE TABLE IF NOT EXISTS autoreply_state (

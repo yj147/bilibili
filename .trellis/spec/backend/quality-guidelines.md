@@ -231,7 +231,7 @@ async def _run_report_batch(task_id):
 For services that maintain in-memory state (cooldowns, caches, tracking dicts), implement periodic cleanup to prevent memory leaks.
 
 ```python
-# Good — periodic cleanup
+# Good — periodic cleanup with safe iteration
 _account_last_report: dict[int, float] = {}
 
 def _cleanup_stale_cooldowns():
@@ -239,7 +239,7 @@ def _cleanup_stale_cooldowns():
     current_time = time.monotonic()
     stale_threshold = 3600
     stale_keys = [
-        account_id for account_id, last_ts in _account_last_report.items()
+        account_id for account_id, last_ts in list(_account_last_report.items())
         if current_time - last_ts > stale_threshold
     ]
     for key in stale_keys:
@@ -249,7 +249,27 @@ def _cleanup_stale_cooldowns():
 _cleanup_stale_cooldowns()
 ```
 
+> **Gotcha: Dict Iteration Safety**: Always use `list()` when iterating a dict that may be modified concurrently (e.g., `list(_account_last_report.items())`). Without `list()`, asyncio task switches during iteration can cause `RuntimeError: dictionary changed size during iteration`.
+
 > **Why**: Long-running services (auto-reply, report execution) can accumulate stale entries in tracking dictionaries. Without cleanup, memory usage grows unbounded over time.
+
+### 16. asyncio.Lock for Shared Resource Protection
+
+When multiple async tasks may concurrently access or modify a shared resource (e.g., WBI key refresh, config reload), protect with `asyncio.Lock` and use double-check pattern:
+
+```python
+# Good — Lock + double-check to prevent redundant work
+_wbi_refresh_lock = asyncio.Lock()
+
+async def refresh_wbi_keys(self) -> bool:
+    async with _wbi_refresh_lock:
+        # Double-check: another coroutine may have refreshed while we waited
+        if not self.wbi_keys_stale():
+            return True
+        # ... actual refresh logic
+```
+
+**Why**: Without the lock, multiple concurrent requests discovering stale WBI keys will all trigger redundant refresh calls to Bilibili's API, wasting requests and risking rate limits. The double-check avoids unnecessary work after acquiring the lock.
 
 ### 10. Fire-and-Forget for Long-Running API Calls
 
@@ -490,16 +510,52 @@ Response:
 
 **Why**: Without buvid, many Bilibili API calls return -352 (risk control) or -412 (rate limit).
 
-### Gotcha: Cookie Refresh is Multi-Step
+### Gotcha: Cookie Refresh is Multi-Step (RSA-OAEP Flow)
 
-Cookie refresh is not a single API call. The full flow:
-1. Generate `correspondPath` via `/x/web-interface/nav`
-2. Call `/passport/login/refresh` with `refresh_token` + `correspondPath`
-3. Confirm new token via `/passport/login/refresh/confirm`
-4. Revoke old refresh token
-5. Update all 6 cookie fields in DB
+Cookie refresh requires 5 steps with specific crypto and header requirements:
+
+1. **Check cookie status**: `GET /x/passport-login/web/cookie/info` — returns `refresh: true` if expired
+2. **Generate CorrespondPath**: RSA-OAEP encrypt `refresh_{millisecond_timestamp}` with B站 fixed public key (SHA-256), hex-encode result
+3. **Fetch refresh_csrf**: `GET https://www.bilibili.com/correspond/1/{correspondPath}` — extract `<div id="1-name">` content
+4. **Refresh cookies**: `POST /x/passport-login/web/cookie/refresh` with `csrf`, `refresh_csrf`, `refresh_token`
+5. **Confirm refresh**: `POST /x/passport-login/web/confirm/refresh` with new `csrf` + old `refresh_token`
+6. Update DB with new `sessdata`, `bili_jct`, `refresh_token`
 
 Each step can fail independently. The service must handle partial failures gracefully.
+
+> **Critical: RSA Public Key Must Match bilibili-api-python**
+>
+> The RSA public key used for CorrespondPath encryption MUST be identical to the one in `bilibili-api-python` library. A single-character difference causes HTTP 404 on the correspond endpoint. Always verify against the reference implementation.
+
+> **Critical: Correspond Endpoint Requirements**
+>
+> The correspond endpoint (`/correspond/1/{path}`) requires:
+> - **buvid3 cookie**: Without it, returns 404. Use `account.get("buvid3") or str(uuid.uuid4())` as fallback.
+> - **Accept-Encoding: gzip, deflate**: httpx defaults to `br` (brotli) which B站 returns but Python can't decode without `brotli` package. Explicitly set `gzip, deflate`.
+> - **Millisecond timestamp**: `round(time.time() * 1000)`. Seconds timestamp → 404, milliseconds → 200.
+
+```python
+# Correct CorrespondPath generation
+def _generate_correspond_path() -> str:
+    ts = round(time.time() * 1000)  # MUST be milliseconds
+    key = RSA.import_key(_BILIBILI_RSA_PUBLIC_KEY)
+    cipher = PKCS1_OAEP.new(key, SHA256)
+    encrypted = cipher.encrypt(f"refresh_{ts}".encode())
+    return binascii.b2a_hex(encrypted).decode()
+
+# Correct correspond request
+correspond_cookies = {
+    "SESSDATA": account["sessdata"],
+    "bili_jct": account["bili_jct"],
+    "buvid3": account.get("buvid3") or str(uuid.uuid4()),
+}
+async with httpx.AsyncClient(
+    cookies=correspond_cookies,
+    headers={**headers, "Accept-Encoding": "gzip, deflate"},
+    timeout=10.0,
+) as cp_client:
+    resp = await cp_client.get(f"https://www.bilibili.com/correspond/1/{path}")
+```
 
 ---
 
@@ -589,3 +645,115 @@ app = FastAPI(dependencies=[Depends(verify_api_key)])
 ```
 
 Also ensure `verify_api_key` reads headers directly via `request.headers.get()` instead of using `Security(APIKeyHeader(...))`, which adds an incompatible parameter type for WebSocket scope.
+
+---
+
+## Auto-Reply Service Patterns
+
+### Pattern: Always Update Dedup State (Even on Failure)
+
+**Problem**: If dedup state is only updated on successful sends, a persistent failure (e.g., invalid message format) causes infinite retry loops — the same message triggers a reply attempt every poll cycle.
+
+**Solution**: Update `autoreply_state.last_msg_ts` immediately after the send attempt, regardless of success/failure.
+
+```python
+# Good — always update state
+send_result = await client.send_private_message(talker_id, reply_text)
+send_success = send_result.get("code") == 0
+
+# Log the attempt
+await execute_insert("INSERT INTO report_logs ...", (...))
+
+# Always update state to prevent retry loops
+await execute_query(
+    "INSERT INTO autoreply_state ... ON CONFLICT ... DO UPDATE SET last_msg_ts = excluded.last_msg_ts",
+    (account["id"], talker_id, msg_ts),
+)
+
+# Bad — only update on success (causes infinite retries)
+if send_success:
+    await execute_query("INSERT INTO autoreply_state ...", (...))
+```
+
+### Pattern: Rate Limit Circuit Breaker (21046)
+
+**Problem**: When B站 returns code 21046 (24-hour send rate limit), continuing to process remaining sessions wastes time and accumulates errors.
+
+**Solution**: Break out of the session loop immediately on 21046.
+
+```python
+if not send_success:
+    if send_result.get("code") == 21046:
+        logger.warning("[AutoReply][%s] Rate limited (21046), skipping remaining sessions", account["name"])
+        break  # Skip ALL remaining sessions for this account
+    continue  # Other errors: skip this session only
+```
+
+### Pattern: Inter-Reply Delay
+
+**Problem**: Sending private messages too fast triggers B站 rate limiting.
+
+**Solution**: Add a configurable delay between successful sends. Default: 3 seconds.
+
+```python
+AUTOREPLY_SEND_DELAY = 3.0  # seconds
+
+# After successful send
+if send_success:
+    await asyncio.sleep(AUTOREPLY_SEND_DELAY)
+```
+
+### Pattern: Self-Message Filtering
+
+**Problem**: Auto-reply can create infinite loops by replying to its own messages.
+
+**Solution**: Check both `talker_id` and `sender_uid` against own UID.
+
+```python
+# Skip conversations where we are the other party
+if str(talker_id) == str(own_uid):
+    continue
+
+# Skip if last message was sent by us (even in conversations with others)
+sender_uid = last_msg.get("sender_uid", 0)
+if str(sender_uid) == str(own_uid):
+    continue
+```
+
+### Gotcha: B站 Private Message API Endpoints
+
+- **Session list**: `api.vc.bilibili.com/session_svr/v1/session_svr/get_sessions` (NOT `svr_sync`)
+- **Send message**: `api.vc.bilibili.com/web_im/v1/web_im/send_msg` (no session_svr equivalent)
+
+The `svr_sync` endpoint was deprecated. Always use `session_svr/get_sessions`.
+
+---
+
+## Testing Gotchas
+
+### Gotcha: Mock Data Must Cover All Production Code Checks
+
+**Problem**: When production code adds a new field check (e.g., `sender_uid`), existing mocks that omit this field still pass because `.get("sender_uid", 0)` returns the default. The test "passes" but doesn't exercise the filtering logic.
+
+**Solution**: Always add the field to mocks when production code checks it.
+
+```python
+# Good — mock covers sender_uid check
+"last_msg": {"timestamp": msg_ts, "content": "hello", "sender_uid": 67890}
+
+# Bad — defaults to 0, never matches own_uid, test passes but doesn't test the filter
+"last_msg": {"timestamp": msg_ts, "content": "hello"}
+```
+
+### Gotcha: Test Assertions Must Match Current Behavior
+
+When production behavior changes (e.g., "state only updated on success" → "state always updated"), tests must be updated to assert the NEW behavior. Stale test assertions give false confidence.
+
+```python
+# After behavior change: state always updated even on failure
+assert len(state_rows) == 1                  # State WAS written
+assert state_rows[0]["last_msg_ts"] == msg_ts  # With correct timestamp
+
+# Old (wrong) assertion:
+# assert state_rows == []  # State was NOT written — matches old behavior only
+```

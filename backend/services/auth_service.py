@@ -1,12 +1,39 @@
 """QR code login and cookie refresh service."""
+import binascii
 import re
+import time
+import uuid
 import httpx
+from Crypto.Cipher import PKCS1_OAEP
+from Crypto.PublicKey import RSA
+from Crypto.Hash import SHA256
 from backend.database import execute_query, invalidate_cache
 from backend.config import USER_AGENTS
 from backend.logger import logger
 
 _UA = USER_AGENTS[5]  # Chrome Linux — consistent with config.py
 _SENSITIVE_FIELDS = {"sessdata", "bili_jct", "refresh_token", "dedeuserid_ckmd5"}
+
+# B站固定 RSA 公钥，用于生成 CorrespondPath（与 bilibili-api-python 一致）
+_BILIBILI_RSA_PUBLIC_KEY = """\
+-----BEGIN PUBLIC KEY-----
+MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDLgd2OAkcGVtoE3ThUREbio0Eg
+Uc/prcajMKXvkCKFCWhJYJcLkcM2DKKcSeFpD/j6Boy538YXnR6VhcuUJOhH2x71
+nzPjfdTcqMz7djHum0qSZA0AyCBDABUqCrfNgCiJ00Ra7GmRj+YCK1NJEuewlb40
+JNrRuoEUXpabUzGB8QIDAQAB
+-----END PUBLIC KEY-----"""
+
+
+def _generate_correspond_path() -> str:
+    """Generate CorrespondPath using RSA-OAEP + SHA-256 encryption.
+
+    Uses current millisecond timestamp, matching bilibili-api-python's approach.
+    """
+    ts = round(time.time() * 1000)
+    key = RSA.import_key(_BILIBILI_RSA_PUBLIC_KEY)
+    cipher = PKCS1_OAEP.new(key, SHA256)
+    encrypted = cipher.encrypt(f"refresh_{ts}".encode())
+    return binascii.b2a_hex(encrypted).decode()
 
 
 async def _fetch_buvid(sessdata: str, bili_jct: str) -> dict:
@@ -220,12 +247,22 @@ async def refresh_account_cookies(account_id: int) -> dict:
             timestamp = info_data["data"]["timestamp"]
 
             # Step 2: Get refresh_csrf from correspond page
-            correspond_resp = await client.get(
-                f"https://www.bilibili.com/correspond/1/{timestamp}",
-            )
+            correspond_path = _generate_correspond_path()
+            # Add buvid3 cookie (required by correspond endpoint)
+            correspond_cookies = {
+                "SESSDATA": account["sessdata"],
+                "bili_jct": account["bili_jct"],
+                "buvid3": account.get("buvid3") or str(uuid.uuid4()),
+            }
+            async with httpx.AsyncClient(cookies=correspond_cookies, headers={**headers, "Accept-Encoding": "gzip, deflate"}, timeout=10.0) as cp_client:
+                correspond_resp = await cp_client.get(
+                    f"https://www.bilibili.com/correspond/1/{correspond_path}",
+                )
             match = re.search(r'<div\s+id="1-name">([^<]+)</div>', correspond_resp.text)
             if not match:
-                return {"success": False, "message": "Failed to extract refresh_csrf"}
+                logger.warning("[Auth] Correspond page returned HTTP %d for account %d. Preview: %s",
+                               correspond_resp.status_code, account_id, correspond_resp.text[:200])
+                return {"success": False, "message": f"Failed to extract refresh_csrf (HTTP {correspond_resp.status_code})"}
             refresh_csrf = match.group(1)
 
             # Step 3: Refresh cookies

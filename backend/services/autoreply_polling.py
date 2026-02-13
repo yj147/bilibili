@@ -1,5 +1,6 @@
 """Shared auto-reply polling business logic."""
 
+import asyncio
 from collections.abc import Awaitable, Callable
 import json
 
@@ -11,11 +12,12 @@ ACTIVE_AUTOREPLY_CONFIGS_QUERY = (
     "WHERE is_active = 1 "
     "ORDER BY priority DESC, id ASC"
 )
-STANDALONE_AUTOREPLY_ACCOUNTS_QUERY = "SELECT * FROM accounts WHERE is_active = 1"
+STANDALONE_AUTOREPLY_ACCOUNTS_QUERY = "SELECT * FROM accounts WHERE is_active = 1 AND status IN ('valid', 'expiring')"
 SCHEDULER_AUTOREPLY_ACCOUNTS_QUERY = (
     "SELECT * FROM accounts WHERE is_active = 1 AND status IN ('valid', 'expiring')"
 )
 FALLBACK_AUTOREPLY_TEXT = "您好，稍后回复。"
+AUTOREPLY_SEND_DELAY = 3.0  # seconds between replies to avoid B站 rate limiting
 
 
 ReplySentCallback = Callable[[dict, int | str, str, dict], Awaitable[None]]
@@ -60,6 +62,11 @@ async def run_autoreply_poll_cycle(
 
     for account in _apply_batch_limit(accounts, account_batch_size):
         try:
+            own_uid = account.get("uid")
+            if not own_uid:
+                logger.warning("[AutoReply][%s] Account has no UID, skipping", account.get("name", "?"))
+                continue
+
             auth = BilibiliAuth.from_db_account(account)
             async with BilibiliClient(auth, account_index=0) as client:
                 sessions = await client.get_recent_sessions()
@@ -72,8 +79,12 @@ async def run_autoreply_poll_cycle(
                     msg_ts = last_msg.get("timestamp", 0)
 
                     talker_id = session.get("talker_id")
-                    own_uid = account.get("uid", 0)
                     if str(talker_id) == str(own_uid):
+                        continue
+
+                    # Skip if last message was sent by ourselves (avoid reply loop)
+                    sender_uid = last_msg.get("sender_uid", 0)
+                    if str(sender_uid) == str(own_uid):
                         continue
 
                     state_rows = await execute_query(
@@ -107,15 +118,25 @@ async def run_autoreply_poll_cycle(
                         ),
                     )
 
-                    if not send_success:
-                        continue
-
+                    # Always update autoreply_state to avoid retry loops on persistent failures
                     await execute_query(
                         "INSERT INTO autoreply_state (account_id, talker_id, last_msg_ts) VALUES (?, ?, ?) "
                         "ON CONFLICT(account_id, talker_id) DO UPDATE SET last_msg_ts = excluded.last_msg_ts",
                         (account["id"], talker_id, msg_ts),
                     )
+
+                    if not send_success:
+                        send_code = send_result.get("code")
+                        # Rate limited by B站 — stop processing this account entirely
+                        if send_code == 21046:
+                            logger.warning("[AutoReply][%s] Rate limited (21046), skipping remaining sessions", account["name"])
+                            break
+                        continue
+
                     if on_reply_sent:
                         await on_reply_sent(account, talker_id, reply_text, send_result)
+
+                    # Delay between replies to avoid B站 rate limiting
+                    await asyncio.sleep(AUTOREPLY_SEND_DELAY)
         except Exception as acc_err:
             logger.error("[AutoReply][%s] Error: %s", account.get("name", "?"), acc_err)

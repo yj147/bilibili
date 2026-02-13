@@ -58,7 +58,8 @@ async def test_match_reply_rule_keeps_creation_order_for_same_priority_rules():
 
 
 @pytest.mark.asyncio
-async def test_send_failure_does_not_advance_dedup_state(monkeypatch):
+async def test_send_failure_always_updates_dedup_state(monkeypatch):
+    """State is always updated even on send failure to avoid retry loops on persistent errors."""
     await init_db()
     account_id = await execute_insert(
         """INSERT INTO accounts
@@ -92,7 +93,7 @@ async def test_send_failure_does_not_advance_dedup_state(monkeypatch):
                     "session_list": [
                         {
                             "talker_id": 67890,
-                            "last_msg": {"timestamp": msg_ts, "content": "hello"},
+                            "last_msg": {"timestamp": msg_ts, "content": "hello", "sender_uid": 67890},
                         }
                     ]
                 },
@@ -123,13 +124,15 @@ async def test_send_failure_does_not_advance_dedup_state(monkeypatch):
         assert autoreply_service._autoreply_task is not None
         await autoreply_service._autoreply_task
 
-        assert send_calls["count"] == 2
+        # Only 1 send: second cycle skips because state was already updated on first failure
+        assert send_calls["count"] == 1
 
         state_rows = await execute_query(
             "SELECT last_msg_ts FROM autoreply_state WHERE account_id = ?",
             (account_id,),
         )
-        assert state_rows == []
+        assert len(state_rows) == 1
+        assert state_rows[0]["last_msg_ts"] == msg_ts
 
         status = await autoreply_service.get_status()
         assert status["last_poll_at"] is not None
@@ -139,7 +142,7 @@ async def test_send_failure_does_not_advance_dedup_state(monkeypatch):
             "SELECT executed_at FROM report_logs WHERE account_id = ? AND action = 'autoreply'",
             (account_id,),
         )
-        assert len(log_rows) == send_calls["count"]
+        assert len(log_rows) == 1
         assert all(row["executed_at"].endswith("Z") for row in log_rows)
     finally:
         autoreply_service._autoreply_running = False
@@ -222,8 +225,8 @@ async def test_start_service_respects_configured_batch_sizes(monkeypatch):
                 "code": 0,
                 "data": {
                     "session_list": [
-                        {"talker_id": 30001, "last_msg": {"timestamp": 1700000001, "content": "hello 1"}},
-                        {"talker_id": 30002, "last_msg": {"timestamp": 1700000002, "content": "hello 2"}},
+                        {"talker_id": 30001, "last_msg": {"timestamp": 1700000001, "content": "hello 1", "sender_uid": 30001}},
+                        {"talker_id": 30002, "last_msg": {"timestamp": 1700000002, "content": "hello 2", "sender_uid": 30002}},
                     ]
                 },
             }

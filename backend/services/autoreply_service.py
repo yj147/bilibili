@@ -171,7 +171,7 @@ async def delete_config(config_id: int) -> bool:
 
 async def get_status():
     accounts = await execute_query(
-        "SELECT COUNT(*) as count FROM accounts WHERE is_active = 1"
+        "SELECT COUNT(*) as count FROM accounts WHERE is_active = 1 AND status IN ('valid', 'expiring')"
     )
     return {
         "is_running": _autoreply_running,

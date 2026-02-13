@@ -23,7 +23,7 @@ async def _background_wbi_refresh():
     while True:
         try:
             await asyncio.sleep(3600)  # 1 hour
-            accounts = await execute_query("SELECT * FROM accounts WHERE is_active = 1 LIMIT 1")
+            accounts = await execute_query("SELECT * FROM accounts WHERE is_active = 1 AND status IN ('valid', 'expiring') LIMIT 1")
             if accounts:
                 auth = BilibiliAuth.from_db_account(accounts[0])
                 if await auth.refresh_wbi_keys():
@@ -59,7 +59,7 @@ async def lifespan(app: FastAPI):
     from backend.core.bilibili_auth import BilibiliAuth
     from backend.database import execute_query
     startup_accounts = await execute_query(
-        "SELECT * FROM accounts WHERE is_active = 1 LIMIT 1"
+        "SELECT * FROM accounts WHERE is_active = 1 AND status IN ('valid', 'expiring') LIMIT 1"
     )
     if startup_accounts:
         _auth = BilibiliAuth.from_db_account(startup_accounts[0])
