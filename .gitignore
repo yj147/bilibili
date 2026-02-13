@@ -36,3 +36,14 @@ Thumbs.db
 
 # Node (frontend handled by frontend/.gitignore)
 node_modules/
+
+# Temporary test files
+test_*.py
+test_*.js
+
+# OMC and Claude Code
+.omc/
+.claude/
+
+# Trellis tasks
+.trellis/tasks/
