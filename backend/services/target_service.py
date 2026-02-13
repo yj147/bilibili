@@ -137,3 +137,18 @@ async def export_targets(status: Optional[str] = None):
     if status:
         return await execute_query("SELECT * FROM targets WHERE status = ? ORDER BY created_at DESC", (status,))
     return await execute_query("SELECT * FROM targets ORDER BY created_at DESC")
+
+
+async def get_targets_stats():
+    """Get global statistics for all targets grouped by status."""
+    rows = await execute_query(
+        "SELECT status, COUNT(*) as count FROM targets GROUP BY status"
+    )
+    stats = {row["status"]: row["count"] for row in rows}
+    return {
+        "total": sum(stats.values()),
+        "pending": stats.get("pending", 0),
+        "processing": stats.get("processing", 0),
+        "completed": stats.get("completed", 0),
+        "failed": stats.get("failed", 0),
+    }

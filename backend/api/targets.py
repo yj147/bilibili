@@ -8,6 +8,12 @@ from backend.services import target_service
 router = APIRouter()
 
 
+@router.get("/stats")
+async def get_targets_stats():
+    """Get global statistics for all targets grouped by status."""
+    return await target_service.get_targets_stats()
+
+
 @router.get("/export")
 async def export_targets(status: Optional[str] = None):
     """Export targets list with optional status filter."""

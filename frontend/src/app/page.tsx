@@ -47,6 +47,8 @@ export default function Dashboard() {
   const loading = !accounts;
   const [expandedLogId, setExpandedLogId] = useState<number | null>(null);
   const [logFilter, setLogFilter] = useState<"all" | "success" | "error">("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [timeRange, setTimeRange] = useState<"today" | "week" | "all">("all");
 
   // Merge WS logs (real-time) with API logs (historical), WS first
   const wsAsReportLogs = wsLogs.map((entry, i) => ({
@@ -102,7 +104,32 @@ export default function Dashboard() {
     return { label: "失败", icon: AlertTriangle, bgClass: "bg-red-50", iconClass: "text-red-500", badgeClass: "bg-red-50 text-red-600" };
   }
 
-  const filteredLogs = logFilter === "all" ? logs : logs.filter((l) => logFilter === "success" ? l.success : !l.success);
+  const filteredLogs = logs
+    .filter((l) => logFilter === "all" || (logFilter === "success" ? l.success : !l.success))
+    .filter((l) => {
+      if (!searchQuery.trim()) return true;
+      const query = searchQuery.toLowerCase();
+      const accountName = l.account_name?.toLowerCase() ?? '';
+      const action = l.action.toLowerCase();
+      return accountName.includes(query) || action.includes(query);
+    })
+    .filter((l) => {
+      if (timeRange === "all") return true;
+      const logDate = new Date(l.executed_at);
+      const now = new Date();
+      if (timeRange === "today") {
+        return logDate.toISOString().slice(0, 10) === now.toISOString().slice(0, 10);
+      }
+      if (timeRange === "week") {
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        return logDate >= weekAgo;
+      }
+      return true;
+    });
+
+  const successCount = filteredLogs.filter((l) => l.success).length;
+  const failCount = filteredLogs.length - successCount;
+  const successRate = filteredLogs.length > 0 ? Math.round((successCount / filteredLogs.length) * 100) : 0;
 
   return (
     <div className="p-6 md:p-8">
@@ -254,27 +281,56 @@ export default function Dashboard() {
 
         {/* Log Area */}
         <Card className="md:col-span-3 md:row-span-2 card-elevated">
-          <CardHeader className="pb-3">
+          <CardHeader className="pb-3 space-y-3">
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-sm">
                 <Activity size={16} className="text-accent" /> 任务日志
                 <span className="text-xs text-muted-foreground font-normal ml-1">({filteredLogs.length})</span>
               </CardTitle>
-              <div className="flex gap-1">
-                {(["all", "success", "error"] as const).map((f) => (
-                  <button
-                    key={f}
-                    onClick={() => setLogFilter(f)}
-                    className={`px-2.5 py-1 text-xs rounded-md transition-colors cursor-pointer ${
-                      logFilter === f
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-muted"
-                    }`}
-                  >
-                    {f === "all" ? "全部" : f === "success" ? "成功" : "失败"}
-                  </button>
-                ))}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-green-600">成功: {successCount}</span>
+                  <span className="text-red-600">失败: {failCount}</span>
+                  <span className="text-muted-foreground">成功率: {successRate}%</span>
+                </div>
+                <div className="flex gap-1">
+                  {(["all", "success", "error"] as const).map((f) => (
+                    <button
+                      key={f}
+                      onClick={() => setLogFilter(f)}
+                      className={`px-2.5 py-1 text-xs rounded-md transition-colors cursor-pointer ${
+                        logFilter === f
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-muted"
+                      }`}
+                    >
+                      {f === "all" ? "全部" : f === "success" ? "成功" : "失败"}
+                    </button>
+                  ))}
+                </div>
               </div>
+            </div>
+            <input
+              type="text"
+              placeholder="搜索账号名称或操作..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full px-3 py-1.5 text-sm rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            <div className="flex gap-1">
+              {(["today", "week", "all"] as const).map((range) => (
+                <button
+                  key={range}
+                  onClick={() => setTimeRange(range)}
+                  className={`px-2.5 py-1 text-xs rounded-md transition-colors cursor-pointer ${
+                    timeRange === range
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  {range === "today" ? "今天" : range === "week" ? "最近7天" : "全部"}
+                </button>
+              ))}
             </div>
           </CardHeader>
           <CardContent>

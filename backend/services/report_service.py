@@ -310,6 +310,9 @@ async def scan_and_report_comments(
     if not account:
         return {"error": "Account not found"}
 
+    if not account.get("is_active") or account.get("status") != "valid":
+        return {"error": "Account is not active or valid"}
+
     auth = BilibiliAuth.from_db_account(account)
     errors: list[str] = []
     comments_found = 0

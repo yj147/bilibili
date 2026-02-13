@@ -30,6 +30,21 @@ async function request<T = unknown>(path: string, options: RequestInit = {}): Pr
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: "未知错误" }));
+
+    // 根据 B站错误码显示用户友好消息
+    if (error.bilibili_code) {
+      const biliCodeMessages: Record<number, string> = {
+        [-352]: "账号触发风控，请稍后重试或更换账号",
+        [-101]: "账号未登录或已失效，请重新登录",
+        [-799]: "需要人机验证，请在B站完成验证后重试",
+        [-412]: "请求过于频繁，请稍后重试",
+      };
+      const friendlyMessage = biliCodeMessages[error.bilibili_code];
+      if (friendlyMessage) {
+        throw new Error(friendlyMessage);
+      }
+    }
+
     throw new Error(error.detail || `请求失败 (${response.status})`);
   }
 
@@ -53,6 +68,7 @@ export const api = {
       const query = new URLSearchParams(params).toString();
       return request<TargetListResponse>(`/targets/?${query}`);
     },
+    stats: () => request<{ total: number; pending: number; processing: number; completed: number; failed: number }>("/targets/stats"),
     create: (data: { type: string; identifier: string; reason_id?: number; reason_content_id?: number; reason_text?: string }) =>
       request<Target>("/targets/", { method: "POST", body: JSON.stringify(data) }),
     createBatch: (data: { type: string; identifiers: string[]; reason_id?: number; reason_content_id?: number; reason_text?: string }) =>

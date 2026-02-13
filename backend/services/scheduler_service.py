@@ -100,7 +100,7 @@ async def _run_autoreply_poll(task_id: int):
     from backend.core.bilibili_auth import BilibiliAuth
     from backend.api.websocket import broadcast_log
 
-    accounts = await execute_query("SELECT * FROM accounts WHERE is_active = 1 AND status = 'valid'")
+    accounts = await execute_query("SELECT * FROM accounts WHERE is_active = 1 AND status IN ('valid', 'expiring')")
     configs = await execute_query(
         "SELECT * FROM autoreply_config WHERE is_active = 1 ORDER BY priority DESC"
     )
@@ -165,7 +165,7 @@ async def _run_cookie_health_check(task_id: int):
     from backend.services.auth_service import check_cookie_refresh_needed, refresh_account_cookies
     from backend.api.websocket import broadcast_log
 
-    accounts = await execute_query("SELECT * FROM accounts WHERE is_active = 1 AND status = 'valid'")
+    accounts = await execute_query("SELECT * FROM accounts WHERE is_active = 1 AND status IN ('valid', 'expiring')")
     for account in accounts:
         try:
             status = await check_cookie_refresh_needed(account["id"])

@@ -29,10 +29,10 @@ pytest backend/tests/test_health.py -v
 ### Frontend
 ```bash
 cd frontend
-npm install
-npm run dev      # Development server
-npm run build    # Production build
-npm run lint     # ESLint
+bun install
+bun run dev      # Development server
+bun run build    # Production build
+bun run lint     # ESLint
 ```
 
 ## Architecture
@@ -103,3 +103,76 @@ Next.js Page → SWR hook (lib/swr.ts) → fetch with auth (lib/api.ts)
 - `SENTINEL_MAX_RETRIES` — Request retry count (default: 3)
 - `NEXT_PUBLIC_API_BASE` — Frontend API base URL (default: /api)
 - `NEXT_PUBLIC_API_KEY` — Frontend API key for X-API-Key header
+
+## Testing
+
+### Running Tests
+```bash
+# Backend tests
+pytest backend/tests/ -v
+
+# Frontend tests (if available)
+cd frontend && npm test
+```
+
+### Test Coverage Requirements
+- All service functions must have unit tests
+- API routes must have integration tests
+- Critical paths (report flow, auth, auto-reply) require E2E tests
+- Test data should not use real Bilibili credentials
+
+## Common Gotchas
+
+### SQLite Singleton Connection
+- **MUST** use `--workers 1` (enforced in lifespan with warning)
+- All DB operations use `asyncio.Lock` for concurrency safety
+- WAL mode enabled for better read concurrency
+
+### WBI Signature Refresh
+- Keys expire after 1 hour (checked via `wbi_keys_stale()`)
+- Auto-refresh runs in background task every hour
+- Manual refresh: `await auth.refresh_wbi_keys()`
+
+### Account Cooldown
+- 90s cooldown between reports per account (`ACCOUNT_COOLDOWN`)
+- Tracked in `_account_last_report` dict in `report_service.py`
+- Cleanup runs periodically (`_cleanup_stale_cooldowns()`) to prevent memory leaks
+
+### Type Synchronization
+- Frontend types in `lib/types.ts` must match backend `schemas/`
+- **Use `python scripts/sync-types.py` to auto-generate types**
+- Never manually edit generated types (marked with auto-gen comment)
+
+### Comment Report Reason Validation
+- B站 comment report API only supports `reason_id` values 1-9
+- Values 10+ (e.g., 11 = 涉政敏感) return error code 12012
+- Pydantic validator in `models/target.py` enforces this at input time
+- Runtime fallback in `report_service.py` defaults to 4 (赌博诈骗)
+
+### Fire-and-Forget Status Management
+- Long-running operations use `asyncio.create_task()` with HTTP 202 response
+- **MUST** wrap task creation in try-except to rollback status on failure
+- Example: If task creation fails after marking "processing", rollback to "pending"
+
+### Circuit Breaker for Retries
+- `MAX_RETRY_COUNT = 3` prevents infinite retry loops
+- `retry_count` field tracked in `targets` table
+- Targets exceeding max retries are marked as "failed"
+
+## Error Handling
+
+### Backend
+- Use `HTTPException` for API errors with appropriate status codes
+- Unified exception handlers in `middleware.py` (HTTP, validation, unhandled)
+- Log errors with `logger.error()`, **never** `print()`
+- Bilibili API error codes:
+  - `-412`: Rate limit (exponential backoff)
+  - `-352`: Risk control (fail fast, account flagged)
+  - `-101`: Not logged in (mark account invalid)
+  - `-799`: Human verification required (stop immediately)
+
+### Frontend
+- Use `ErrorBoundary` component for React errors
+- Display user-friendly messages via `Toast` component
+- Log errors to console in development only
+- Handle API errors with proper status code checks

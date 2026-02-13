@@ -40,14 +40,24 @@ export function useLogStream(maxLogs = 100) {
           });
         }
       };
-      ws.onclose = () => {
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        setConnected(false);
+      };
+      ws.onclose = (event) => {
         setConnected(false);
         if (typeof window !== 'undefined') {
           import('sonner').then(({ toast }) => {
-            toast.warning('实时日志连接断开，正在重连...');
+            if (event.code === 1008 || event.code === 4001) {
+              toast.error(`实时日志连接失败: ${event.reason || '认证失败'}`);
+            } else {
+              toast.warning('实时日志连接断开，正在重连...');
+              reconnectRef.current = setTimeout(connect, 3000);
+            }
           });
+        } else if (event.code !== 1008 && event.code !== 4001) {
+          reconnectRef.current = setTimeout(connect, 3000);
         }
-        reconnectRef.current = setTimeout(connect, 3000);
       };
       ws.onmessage = (event) => {
         try {

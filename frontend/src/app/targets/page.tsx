@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Target, Plus, Upload, Trash2, Play, AlertTriangle,
@@ -103,6 +103,9 @@ export default function TargetsPage() {
   const [pageSize, setPageSize] = useState(20);
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  const [searchKeyword, setSearchKeyword] = useState("");
+  const [stats, setStats] = useState({ total: 0, pending: 0, processing: 0, completed: 0, failed: 0 });
+  const [selectedTargets, setSelectedTargets] = useState<Set<number>>(new Set());
 
   const queryParams: Record<string, string> = { page: page.toString(), page_size: pageSize.toString() };
   if (statusFilter) queryParams.status = statusFilter;
@@ -110,11 +113,34 @@ export default function TargetsPage() {
 
   const { data: targetData, mutate, isLoading } = useTargets(queryParams);
   const { data: accounts = [] } = useAccounts();
-  const targets = targetData?.items ?? [];
-  const total = targetData?.total ?? 0;
+  const allTargets = targetData?.items ?? [];
+
+  const targets = useMemo(() => {
+    if (!searchKeyword.trim()) return allTargets;
+    const keyword = searchKeyword.toLowerCase();
+    return allTargets.filter(t =>
+      t.identifier.toLowerCase().includes(keyword) ||
+      (t.display_text && t.display_text.toLowerCase().includes(keyword))
+    );
+  }, [allTargets, searchKeyword]);
+
+  const total = targets.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const loading = isLoading;
   const { confirm, ConfirmDialog } = useConfirm();
+
+  // Fetch global statistics
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const data = await api.targets.stats();
+        setStats(data);
+      } catch (error) {
+        console.error("Failed to fetch stats:", error);
+      }
+    };
+    fetchStats();
+  }, []);
 
   // WebSocket: auto-refresh when a report event arrives
   const { logs: wsLogs } = useLogStream(10);
@@ -186,10 +212,32 @@ export default function TargetsPage() {
     } catch { toast.error("批量添加失败"); }
   };
 
+  const handleToggleSelect = (id: number) => {
+    setSelectedTargets(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedTargets.size === targets.length) {
+      setSelectedTargets(new Set());
+    } else {
+      setSelectedTargets(new Set(targets.map(t => t.id)));
+    }
+  };
+
   const handleExecuteAll = async () => {
-    const pendingIds = targets.filter(t => t.status === 'pending').map(t => t.id);
-    if (pendingIds.length === 0) { toast.warning("没有待处理目标"); return; }
-    try { await api.reports.executeBatch(pendingIds); mutate(); toast.success("批量执行已启动"); }
+    const selectedIds = Array.from(selectedTargets);
+    if (selectedIds.length === 0) { toast.warning("请先选择目标"); return; }
+    try {
+      await api.reports.executeBatch(selectedIds);
+      mutate();
+      setSelectedTargets(new Set());
+      toast.success("批量执行已启动");
+    }
     catch { toast.error("批量执行失败"); }
   };
 
@@ -258,11 +306,11 @@ export default function TargetsPage() {
     }
   };
 
-  const stats = [
-    { label: "总目标数", value: total.toString(), icon: Target, color: "text-blue-500" },
-    { label: "待处理", value: targets.filter(t => t.status === 'pending').length.toString(), icon: Filter, color: "text-yellow-500" },
-    { label: "已清理", value: targets.filter(t => t.status === 'completed').length.toString(), icon: CheckCircle2, color: "text-green-500" },
-    { label: "处理失败", value: targets.filter(t => t.status === 'failed').length.toString(), icon: AlertTriangle, color: "text-red-500" },
+  const statsCards = [
+    { label: "总目标数", value: stats.total.toString(), icon: Target, color: "text-blue-500" },
+    { label: "待处理", value: stats.pending.toString(), icon: Filter, color: "text-yellow-500" },
+    { label: "已清理", value: stats.completed.toString(), icon: CheckCircle2, color: "text-green-500" },
+    { label: "处理失败", value: stats.failed.toString(), icon: AlertTriangle, color: "text-red-500" },
   ];
 
   return (
@@ -287,15 +335,15 @@ export default function TargetsPage() {
           <Button variant="outline" size="sm" onClick={() => { setScanResult(null); setShowScanModal(true); }}>
             <Search size={16} /> 评论扫描
           </Button>
-          <Button onClick={handleExecuteAll}>
-            <Play size={18} /> 批量执行
+          <Button onClick={handleExecuteAll} disabled={selectedTargets.size === 0}>
+            <Play size={18} /> 批量执行 {selectedTargets.size > 0 && `(${selectedTargets.size})`}
           </Button>
         </div>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        {stats.map((stat, i) => (
+        {statsCards.map((stat, i) => (
           <Card key={i} className="p-4 flex items-center gap-4 card-elevated cursor-default">
             <div className={`p-3 rounded-xl bg-muted ${stat.color}`}><stat.icon size={20} /></div>
             <div>
@@ -306,10 +354,20 @@ export default function TargetsPage() {
         ))}
       </div>
 
-      {/* Filters & Pagination Controls */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
-        <div className="flex gap-3 flex-wrap items-center">
-          <Select value={statusFilter || "all"} onValueChange={(v) => { setStatusFilter(v === "all" ? "" : v); setPage(1); }}>
+      {/* Search & Filters */}
+      <div className="flex flex-col gap-4 mb-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
+          <Input
+            value={searchKeyword}
+            onChange={(e) => { setSearchKeyword(e.target.value); setPage(1); }}
+            placeholder="搜索 BV号/rpid/uid/评论内容..."
+            className="pl-10 h-9"
+          />
+        </div>
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex gap-3 flex-wrap items-center">
+            <Select value={statusFilter || "all"} onValueChange={(v) => { setStatusFilter(v === "all" ? "" : v); setPage(1); }}>
             <SelectTrigger className="w-[130px] h-9 text-xs">
               <SelectValue placeholder="全部状态" />
             </SelectTrigger>
@@ -358,12 +416,23 @@ export default function TargetsPage() {
             <ChevronRight size={14} />
           </Button>
         </div>
+        </div>
       </div>
 
       {/* Target list */}
       <Card className="overflow-hidden min-h-[300px] card-static">
         <div className="p-6 border-b flex items-center justify-between bg-muted/50">
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-widest">目标列表</h3>
+          <div className="flex items-center gap-3">
+            {targets.length > 0 && (
+              <input
+                type="checkbox"
+                checked={selectedTargets.size === targets.length && targets.length > 0}
+                onChange={handleSelectAll}
+                className="w-4 h-4 rounded cursor-pointer"
+              />
+            )}
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-widest">目标列表</h3>
+          </div>
         </div>
         {loading && targets.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground">
@@ -378,6 +447,12 @@ export default function TargetsPage() {
             {targets.map((target) => (
               <div key={target.id} className="flex items-center justify-between p-4 px-6 hover:bg-muted/50 transition-colors group">
                 <div className="flex items-center gap-4">
+                  <input
+                    type="checkbox"
+                    checked={selectedTargets.has(target.id)}
+                    onChange={() => handleToggleSelect(target.id)}
+                    className="w-4 h-4 rounded cursor-pointer"
+                  />
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-muted text-muted-foreground">
                     {target.type === 'video' ? <Play size={18} /> : target.type === 'user' ? <User size={18} /> : <MessageCircle size={18} />}
                   </div>
