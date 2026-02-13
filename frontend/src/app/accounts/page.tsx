@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useReducer } from "react";
 import {
   Users,
   Plus,
@@ -42,6 +42,46 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useConfirm } from "@/components/ConfirmDialog";
 
+type LoadingState = {
+  checking: Set<number>;
+  refreshing: Set<number>;
+  editing: Set<number>;
+};
+
+type LoadingAction =
+  | { type: "ADD_CHECKING"; id: number }
+  | { type: "REMOVE_CHECKING"; id: number }
+  | { type: "ADD_REFRESHING"; id: number }
+  | { type: "REMOVE_REFRESHING"; id: number }
+  | { type: "ADD_EDITING"; id: number }
+  | { type: "REMOVE_EDITING"; id: number };
+
+function loadingReducer(state: LoadingState, action: LoadingAction): LoadingState {
+  switch (action.type) {
+    case "ADD_CHECKING":
+      return { ...state, checking: new Set(state.checking).add(action.id) };
+    case "REMOVE_CHECKING": {
+      const newSet = new Set(state.checking);
+      newSet.delete(action.id);
+      return { ...state, checking: newSet };
+    }
+    case "ADD_REFRESHING":
+      return { ...state, refreshing: new Set(state.refreshing).add(action.id) };
+    case "REMOVE_REFRESHING": {
+      const newSet = new Set(state.refreshing);
+      newSet.delete(action.id);
+      return { ...state, refreshing: newSet };
+    }
+    case "ADD_EDITING":
+      return { ...state, editing: new Set(state.editing).add(action.id) };
+    case "REMOVE_EDITING": {
+      const newSet = new Set(state.editing);
+      newSet.delete(action.id);
+      return { ...state, editing: newSet };
+    }
+  }
+}
+
 export default function AccountsPage() {
   const { data: accounts = [], error, mutate, isValidating } = useAccounts();
   const loading = isValidating;
@@ -52,10 +92,12 @@ export default function AccountsPage() {
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [checkingId, setCheckingId] = useState<number | null>(null);
   const [isCheckingAll, setIsCheckingAll] = useState(false);
-  const [refreshingId, setRefreshingId] = useState<number | null>(null);
-  const [loadingEditId, setLoadingEditId] = useState<number | null>(null);
+  const [loadingState, dispatch] = useReducer(loadingReducer, {
+    checking: new Set<number>(),
+    refreshing: new Set<number>(),
+    editing: new Set<number>(),
+  });
   const notifiedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -117,7 +159,7 @@ export default function AccountsPage() {
   };
 
   const handleEdit = async (acc: AccountPublic) => {
-    setLoadingEditId(acc.id);
+    dispatch({ type: "ADD_EDITING", id: acc.id });
     try {
       const detail = await api.accounts.get(acc.id);
       if (typeof detail.sessdata !== "string" || typeof detail.bili_jct !== "string") {
@@ -139,7 +181,7 @@ export default function AccountsPage() {
     } catch {
       toast.error("加载账号详情失败");
     } finally {
-      setLoadingEditId(null);
+      dispatch({ type: "REMOVE_EDITING", id: acc.id });
     }
   };
 
@@ -161,7 +203,7 @@ export default function AccountsPage() {
   };
 
   const handleCheck = async (id: number) => {
-    setCheckingId(id);
+    dispatch({ type: "ADD_CHECKING", id });
     try {
       await api.accounts.check(id);
       mutate();
@@ -170,7 +212,7 @@ export default function AccountsPage() {
       console.error("Check failed", err);
       toast.error("检测失败");
     } finally {
-      setCheckingId(null);
+      dispatch({ type: "REMOVE_CHECKING", id });
     }
   };
 
@@ -198,7 +240,7 @@ export default function AccountsPage() {
   };
 
   const handleRefreshCookie = async (id: number) => {
-    setRefreshingId(id);
+    dispatch({ type: "ADD_REFRESHING", id });
     try {
       const result = await api.auth.refreshCookies(id);
       if (result.success) {
@@ -210,7 +252,7 @@ export default function AccountsPage() {
     } catch {
       toast.error("Cookie 刷新请求失败");
     } finally {
-      setRefreshingId(null);
+      dispatch({ type: "REMOVE_REFRESHING", id });
     }
   };
 
@@ -343,28 +385,28 @@ export default function AccountsPage() {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleEdit(acc)}
-                          disabled={loadingEditId === acc.id}
+                          disabled={loadingState.editing.has(acc.id)}
                           aria-label="编辑账号"
                         >
-                          {loadingEditId === acc.id ? <Loader2 size={16} className="animate-spin" /> : <Pencil size={16} />}
+                          {loadingState.editing.has(acc.id) ? <Loader2 size={16} className="animate-spin" /> : <Pencil size={16} />}
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => handleCheck(acc.id)}
-                          disabled={checkingId === acc.id}
+                          disabled={loadingState.checking.has(acc.id)}
                           aria-label="检测有效性"
                         >
-                          {checkingId === acc.id ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
+                          {loadingState.checking.has(acc.id) ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => handleRefreshCookie(acc.id)}
-                          disabled={refreshingId === acc.id}
+                          disabled={loadingState.refreshing.has(acc.id)}
                           aria-label="刷新 Cookie"
                         >
-                          {refreshingId === acc.id ? <Loader2 size={16} className="animate-spin" /> : <Cookie size={16} />}
+                          {loadingState.refreshing.has(acc.id) ? <Loader2 size={16} className="animate-spin" /> : <Cookie size={16} />}
                         </Button>
                         <Button
                           variant="ghost"

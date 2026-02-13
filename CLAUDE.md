@@ -55,8 +55,7 @@ api/ (thin routers) → services/ (business logic) → database.py (raw SQL)
 - **`core/bilibili_auth.py`** — Cookie/credential management, WBI key refresh, QR login flow.
 - **`core/wbi_sign.py`** — WBI request signing algorithm.
 - **`db/schema.sql`** — Idempotent SQLite DDL (CREATE IF NOT EXISTS). Tables: `accounts`, `targets`, `report_logs`, `autoreply_config`, `scheduled_tasks`, `system_config`, `autoreply_state`.
-- **`models/`** — Dataclass-style models for DB rows.
-- **`schemas/`** — Pydantic models for request/response validation.
+- **`models/`** — Dataclass-style models for DB rows and Pydantic models for request/response validation.
 - **`services/`** — Business logic (account_service, target_service, report_service, scheduler_service, autoreply_service, auth_service, config_service).
 
 API routes are mounted at `/api/<resource>` (e.g., `/api/accounts`, `/api/targets`). WebSocket endpoint at `/ws/logs` for real-time log streaming.
@@ -67,8 +66,8 @@ API routes are mounted at `/api/<resource>` (e.g., `/api/accounts`, `/api/target
 
 - **`src/app/api/[...path]/route.ts`** — Catch-all API proxy forwarding all `/api/*` requests to `http://127.0.0.1:8000` (the backend). Frontend never calls Bilibili directly.
 - **`src/lib/api.ts`** — Typed API client with `X-API-Key` auth header. Exports `api` object with namespaced methods (accounts, targets, reports, autoreply, auth, scheduler, config).
-- **`src/lib/swr.ts`** — SWR hooks per resource (useAccounts, useTargets, useReportLogs, etc.).
-- **`src/lib/types.ts`** — TypeScript interfaces manually synced with backend `schemas/`. Must be kept in sync.
+- **`src/lib/swr.ts`** — SWR hooks per resource (useAccounts, useTargets, useReportLogs, useTargetStats, etc.).
+- **`src/lib/types.ts`** — TypeScript interfaces manually synced with backend `models/`. Must be kept in sync.
 - **`src/lib/websocket.ts`** — `useLogStream` hook for real-time WebSocket log streaming.
 - **`src/components/`** — Shared components (Sidebar, BentoCard, StatItem, ErrorBoundary, QRLoginModal, Toast) plus `ui/` directory with shadcn/ui primitives.
 - **`src/app/`** — Page routes: dashboard (`page.tsx`), accounts, targets, autoreply, scheduler, config.
@@ -88,7 +87,7 @@ Next.js Page → SWR hook (lib/swr.ts) → fetch with auth (lib/api.ts)
 
 | Boundary | Convention |
 |----------|------------|
-| Frontend ↔ Backend | Manual sync: `lib/types.ts` mirrors `backend/schemas/` |
+| Frontend ↔ Backend | Manual sync: `lib/types.ts` mirrors `backend/models/` |
 | Dates | Python datetime → JSON ISO string → TS string |
 | JSON columns | SQLite TEXT → Python dict → TS `Record<string, unknown>` |
 | Booleans | SQLite INTEGER (0/1) → Python bool → JSON true/false |
@@ -139,7 +138,7 @@ cd frontend && npm test
 - Cleanup runs periodically (`_cleanup_stale_cooldowns()`) to prevent memory leaks
 
 ### Type Synchronization
-- Frontend types in `lib/types.ts` must match backend `schemas/`
+- Frontend types in `lib/types.ts` must match backend `models/`
 - **Use `python scripts/sync-types.py` to auto-generate types**
 - Never manually edit generated types (marked with auto-gen comment)
 

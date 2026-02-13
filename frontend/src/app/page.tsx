@@ -55,7 +55,7 @@ export default function Dashboard() {
 
   // Merge WS logs (real-time) with API logs (historical), WS first
   const wsAsReportLogs = wsLogs.map((entry, i) => ({
-    id: -(i + 1),
+    id: entry.id ?? -(i + 1),
     target_id: Number(entry.data?.target_id ?? 0),
     account_id: entry.data?.account_id != null ? Number(entry.data.account_id) : null,
     account_name: String(entry.data?.account_name ?? 'system'),
@@ -66,14 +66,10 @@ export default function Dashboard() {
     error_message: entry.type === 'error' ? entry.message : null,
     executed_at: new Date(entry.timestamp).toISOString(),
   }));
+  const wsLogIds = new Set(wsAsReportLogs.filter(wl => wl.id > 0).map(wl => wl.id));
   const logs = [
     ...wsAsReportLogs,
-    ...apiLogs.filter(
-      (al) => !wsAsReportLogs.some(
-        (wl) => wl.action === al.action
-          && Math.abs(parseDateWithUtcFallback(wl.executed_at).getTime() - parseDateWithUtcFallback(al.executed_at).getTime()) < 2000
-      )
-    ),
+    ...apiLogs.filter(al => !wsLogIds.has(al.id)),
   ].slice(0, 50);
 
   // Bar chart: last 7 days of report activity

@@ -11,13 +11,14 @@ from backend.logger import logger
 
 # Track last report time per account for cooldown
 _account_last_report: dict[int, float] = {}
+_cooldown_lock = asyncio.Lock()
 
 def _cleanup_stale_cooldowns():
     """Remove cooldown entries older than 1 hour to prevent memory leak."""
     current_time = time.monotonic()
     stale_threshold = 3600  # 1 hour
     stale_keys = [
-        account_id for account_id, last_ts in _account_last_report.items()
+        account_id for account_id, last_ts in list(_account_last_report.items())
         if current_time - last_ts > stale_threshold
     ]
     for key in stale_keys:
@@ -82,7 +83,7 @@ async def execute_single_report(target: dict, account: dict) -> dict:
             # 0=success, 12022=already deleted, 12008=already reported — target is dealt with
             success = code == 0 or code in (12022, 12008)
 
-            await execute_insert(
+            log_id = await execute_insert(
                 """INSERT INTO report_logs (target_id, account_id, action, request_data, response_data, success, error_message)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (
@@ -99,6 +100,7 @@ async def execute_single_report(target: dict, account: dict) -> dict:
                 "report",
                 f"[{account['name']}] report_{target['type']} {target['identifier']} -> {'OK' if success else 'FAIL'}",
                 {"target_id": target["id"], "account_id": account["id"], "success": success},
+                log_id=log_id,
             )
 
             return {
@@ -111,7 +113,7 @@ async def execute_single_report(target: dict, account: dict) -> dict:
             }
 
     except Exception as e:
-        await execute_insert(
+        log_id = await execute_insert(
             """INSERT INTO report_logs (target_id, account_id, action, success, error_message)
                VALUES (?, ?, ?, ?, ?)""",
             (target["id"], account["id"], f"report_{target['type']}", False, str(e)),
@@ -121,6 +123,7 @@ async def execute_single_report(target: dict, account: dict) -> dict:
             "report",
             f"[{account['name']}] report_{target['type']} {target['identifier']} -> ERROR: {str(e)}",
             {"target_id": target["id"], "account_id": account["id"], "success": False},
+            log_id=log_id,
         )
         return {
             "target_id": target["id"],

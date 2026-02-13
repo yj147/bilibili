@@ -220,6 +220,66 @@ class TypeScriptGenerator:
         return '\n'.join(self.output)
 
 
+def validate_types(all_models: Dict[str, List[Tuple[str, str, bool]]],
+                   resolved_models: Dict[str, List[Tuple[str, str, bool]]],
+                   all_inheritance: Dict[str, str],
+                   frontend_types_file: Path) -> bool:
+    """Validate type synchronization and report issues."""
+    issues = []
+
+    # 1. Check all models are converted
+    missing_models = [name for name, fields in all_models.items() if not fields and name not in resolved_models]
+    if missing_models:
+        issues.append(f"⚠ Models without fields: {', '.join(missing_models)}")
+
+    # 2. Detect circular dependencies
+    def has_cycle(node: str, visited: Set[str], stack: Set[str]) -> bool:
+        visited.add(node)
+        stack.add(node)
+
+        if node in all_inheritance:
+            parent = all_inheritance[node]
+            if parent in stack:
+                return True
+            if parent not in visited and has_cycle(parent, visited, stack):
+                return True
+
+        stack.remove(node)
+        return False
+
+    visited = set()
+    for model in all_models:
+        if model not in visited:
+            if has_cycle(model, visited, set()):
+                issues.append(f"✗ Circular dependency detected in inheritance chain involving: {model}")
+
+    # 3. Check unknown types
+    unknown_types = set()
+    for fields in resolved_models.values():
+        for _, type_str, _ in fields:
+            base_type = type_str.split('[')[0]
+            if base_type not in TypeMapper.BASIC_TYPES and not base_type.startswith('Literal'):
+                if base_type not in all_models and base_type not in ('dict', 'Dict', 'list'):
+                    unknown_types.add(base_type)
+
+    if unknown_types:
+        issues.append(f"⚠ Unknown types (may be custom): {', '.join(sorted(unknown_types))}")
+
+    # 4. Verify output file exists
+    if not frontend_types_file.exists():
+        issues.append(f"✗ Output file not created: {frontend_types_file}")
+
+    # Report
+    print("\n=== Validation Report ===")
+    if issues:
+        for issue in issues:
+            print(issue)
+        return False
+    else:
+        print("✓ All validations passed")
+        return True
+
+
 def sync_types():
     """Main function to sync types from backend to frontend."""
     # Paths
@@ -274,6 +334,9 @@ def sync_types():
 
     print(f"✓ Generated {len([f for f in resolved_models.values() if f])} interfaces and {len(all_type_aliases)} type aliases")
     print(f"✓ Written to {frontend_types_file}")
+
+    # Validate
+    validate_types(all_models, resolved_models, all_inheritance, frontend_types_file)
 
 
 if __name__ == '__main__':

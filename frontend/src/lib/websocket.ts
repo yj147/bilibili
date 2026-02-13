@@ -5,6 +5,7 @@ export interface LogEntry {
   message: string;
   data: Record<string, unknown>;
   timestamp: number;
+  id?: number;
 }
 
 function getWsUrl() {

@@ -55,3 +55,7 @@ export function useConfigs() {
 export function useSystemInfo() {
   return useSWR<{ version: string; python: string; platform: string; accounts: number; targets: number }>('/system/info', fetcher, { refreshInterval: 30000 });
 }
+
+export function useTargetStats() {
+  return useSWR<{ total: number; pending: number; processing: number; completed: number; failed: number }>('/targets/stats', fetcher, { refreshInterval: 30000 });
+}

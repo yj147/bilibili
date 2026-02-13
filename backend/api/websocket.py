@@ -15,14 +15,17 @@ router = APIRouter()
 _clients: List[WebSocket] = []
 
 
-async def broadcast_log(log_type: str, message: str, data: dict = None):
+async def broadcast_log(log_type: str, message: str, data: dict = None, log_id: int = None):
     """Broadcast a log message to all connected clients."""
-    payload = json.dumps({
+    payload_dict = {
         "type": log_type,
         "message": message,
         "data": data or {},
         "timestamp": time.time()
-    })
+    }
+    if log_id is not None:
+        payload_dict["id"] = log_id
+    payload = json.dumps(payload_dict)
     
     disconnected = []
     for client in _clients:

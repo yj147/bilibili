@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import time
@@ -7,6 +8,7 @@ from backend.logger import logger
 
 # Module-level WBI key cache shared across all BilibiliAuth instances
 _wbi_cache: dict = {"img_key": "", "sub_key": "", "refreshed_at": 0.0}
+_wbi_refresh_lock = asyncio.Lock()
 _WBI_TTL_SECONDS = 3600  # Refresh WBI keys every 1 hour
 
 
@@ -59,44 +61,50 @@ class BilibiliAuth:
     async def refresh_wbi_keys(self) -> bool:
         """Fetches fresh WBI keys from Bilibili's nav API and updates module cache."""
         global _wbi_cache
-        url = "https://api.bilibili.com/x/web-interface/nav"
-        
-        cookies = self.get_cookies(0) if self.accounts else {}
-        
-        try:
-            async with httpx.AsyncClient(cookies=cookies, timeout=10.0) as client:
-                headers = {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    "Referer": "https://www.bilibili.com/"
-                }
-                resp = await client.get(url, headers=headers)
-                data = resp.json()
-                if data["code"] == 0:
-                    wbi_img = data["data"].get("wbi_img")
-                    if not wbi_img:
+
+        async with _wbi_refresh_lock:
+            # Double-check to avoid redundant refreshes
+            if not self.wbi_keys_stale():
+                return True
+
+            url = "https://api.bilibili.com/x/web-interface/nav"
+
+            cookies = self.get_cookies(0) if self.accounts else {}
+
+            try:
+                async with httpx.AsyncClient(cookies=cookies, timeout=10.0) as client:
+                    headers = {
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                        "Referer": "https://www.bilibili.com/"
+                    }
+                    resp = await client.get(url, headers=headers)
+                    data = resp.json()
+                    if data["code"] == 0:
+                        wbi_img = data["data"].get("wbi_img")
+                        if not wbi_img:
+                            return False
+                        img_url = wbi_img["img_url"]
+                        sub_url = wbi_img["sub_url"]
+
+                        img_key = img_url.split("/")[-1].split(".")[0]
+                        sub_key = sub_url.split("/")[-1].split(".")[0]
+
+                        # Update module-level cache
+                        _wbi_cache["img_key"] = img_key
+                        _wbi_cache["sub_key"] = sub_key
+                        _wbi_cache["refreshed_at"] = time.monotonic()
+
+                        # Update instance keys
+                        self.wbi_keys["img_key"] = img_key
+                        self.wbi_keys["sub_key"] = sub_key
+                        logger.info("WBI Keys refreshed: %s...", img_key[:4])
+                        return True
+                    elif data["code"] == -101:
+                        logger.warning("WBI refresh failed: not logged in (code -101)")
                         return False
-                    img_url = wbi_img["img_url"]
-                    sub_url = wbi_img["sub_url"]
-                    
-                    img_key = img_url.split("/")[-1].split(".")[0]
-                    sub_key = sub_url.split("/")[-1].split(".")[0]
-                    
-                    # Update module-level cache
-                    _wbi_cache["img_key"] = img_key
-                    _wbi_cache["sub_key"] = sub_key
-                    _wbi_cache["refreshed_at"] = time.monotonic()
-                    
-                    # Update instance keys
-                    self.wbi_keys["img_key"] = img_key
-                    self.wbi_keys["sub_key"] = sub_key
-                    logger.info("WBI Keys refreshed: %s...", img_key[:4])
-                    return True
-                elif data["code"] == -101:
-                    logger.warning("WBI refresh failed: not logged in (code -101)")
-                    return False
-        except Exception as e:
-            logger.error("WBI refresh failed: %s", e)
-        return False
+            except Exception as e:
+                logger.error("WBI refresh failed: %s", e)
+            return False
 
     def get_wbi_keys(self) -> tuple[str, str]:
         """Return WBI keys, preferring module cache if instance keys are empty."""
