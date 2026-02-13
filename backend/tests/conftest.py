@@ -1,6 +1,7 @@
 import pytest
 import os
 import sys
+import asyncio
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
@@ -15,4 +16,7 @@ def reset_db_state(monkeypatch, tmp_path):
     monkeypatch.setattr(db_mod, "DATABASE_PATH", test_db)
     db_mod._connection = None
     db_mod._db_initialized = False
+    db_mod._lock = asyncio.Lock()
+    db_mod._cache = {}
+    db_mod._cache_lock = asyncio.Lock()
     yield

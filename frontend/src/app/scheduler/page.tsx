@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import { api } from "@/lib/api";
+import { parseDateWithUtcFallback } from "@/lib/datetime";
 import { useSchedulerTasks, useSchedulerHistory } from "@/lib/swr";
 import type { ScheduledTask } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
@@ -142,7 +143,7 @@ export default function SchedulerPage() {
                       <span>类型: {task.task_type === 'report_batch' ? '批量举报' : '自动回复检查'}</span>
                       {task.last_run_at && <>
                         <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
-                        <span>上次: {new Date(task.last_run_at).toLocaleString()}</span>
+                        <span>上次: {parseDateWithUtcFallback(task.last_run_at).toLocaleString()}</span>
                       </>}
                     </div>
                   </div>
@@ -177,7 +178,7 @@ export default function SchedulerPage() {
                   {log.success ? <CheckCircle2 size={14} className="text-green-500" /> : <AlertCircle size={14} className="text-red-500" />}
                   <div className="flex-1">
                     <p className="text-xs font-medium">{log.action}</p>
-                    <p className="text-xs text-muted-foreground">{new Date(log.executed_at).toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">{parseDateWithUtcFallback(log.executed_at).toLocaleString()}</p>
                   </div>
                   <Badge variant={log.success ? "default" : "destructive"} className="text-xs">
                     {log.success ? '成功' : '失败'}

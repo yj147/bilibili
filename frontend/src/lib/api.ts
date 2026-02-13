@@ -5,7 +5,11 @@
 import type {
   Account,
   AccountCreate,
+  AccountPublic,
+  AccountUpdate,
   AutoReplyConfig,
+  AutoReplyConfigCreate,
+  AutoReplyConfigUpdate,
   AutoReplyStatus,
   CommentScanResult,
   ReportLog,
@@ -54,12 +58,13 @@ async function request<T = unknown>(path: string, options: RequestInit = {}): Pr
 export const api = {
   // --- Accounts ---
   accounts: {
-    list: () => request<Account[]>("/accounts/"),
+    list: () => request<AccountPublic[]>("/accounts/"),
     get: (id: number) => request<Account>(`/accounts/${id}`),
-    create: (data: AccountCreate) => request<Account>("/accounts/", { method: "POST", body: JSON.stringify(data) }),
-    update: (id: number, data: Partial<AccountCreate>) => request<Account>(`/accounts/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    create: (data: AccountCreate) => request<AccountPublic>("/accounts/", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: number, data: AccountUpdate) => request<AccountPublic>(`/accounts/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     delete: (id: number) => request(`/accounts/${id}`, { method: "DELETE" }),
     check: (id: number) => request(`/accounts/${id}/check`, { method: "POST" }),
+    checkAll: () => request<{ checked: number; results: unknown[] }>("/accounts/check-all", { method: "POST" }),
   },
 
   // --- Targets ---
@@ -99,14 +104,19 @@ export const api = {
   // --- Auto-Reply ---
   autoreply: {
     getConfigs: () => request<AutoReplyConfig[]>("/autoreply/config"),
-    createConfig: (data: Omit<AutoReplyConfig, "id">) =>
+    createConfig: (data: AutoReplyConfigCreate) =>
       request<AutoReplyConfig>("/autoreply/config", { method: "POST", body: JSON.stringify(data) }),
-    updateConfig: (id: number, data: Partial<AutoReplyConfig>) =>
+    upsertDefaultReply: (response: string) =>
+      request<AutoReplyConfig>("/autoreply/config/default", {
+        method: "PUT",
+        body: JSON.stringify({ response }),
+      }),
+    updateConfig: (id: number, data: AutoReplyConfigUpdate) =>
       request<AutoReplyConfig>(`/autoreply/config/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     deleteConfig: (id: number) => request(`/autoreply/config/${id}`, { method: "DELETE" }),
     getStatus: () => request<AutoReplyStatus>("/autoreply/status"),
-    start: (interval: number = 30) => request(`/autoreply/start?interval=${interval}`, { method: "POST" }),
-    stop: () => request("/autoreply/stop", { method: "POST" }),
+    enable: (interval: number = 30) => request(`/autoreply/enable?interval=${interval}`, { method: "POST" }),
+    disable: () => request("/autoreply/disable", { method: "POST" }),
   },
 
   // --- Config ---

@@ -7,7 +7,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from backend.database import execute_query, execute_insert
+from backend.database import execute_query, execute_insert, invalidate_cache
 from backend.config import MIN_DELAY, MAX_DELAY
 from backend.logger import logger
 
@@ -64,6 +64,15 @@ def stop_scheduler():
         logger.info("APScheduler stopped")
 
 
+async def has_active_autoreply_poll_task() -> bool:
+    """Check whether any active autoreply_poll task exists in DB."""
+    rows = await execute_query(
+        "SELECT 1 FROM scheduled_tasks WHERE task_type = ? AND is_active = 1 LIMIT 1",
+        ("autoreply_poll",),
+    )
+    return bool(rows)
+
+
 # ── Job functions ─────────────────────────────────────────────────────────
 
 async def _run_report_batch(task_id: int):
@@ -81,14 +90,20 @@ async def _run_report_batch(task_id: int):
         await broadcast_log("scheduler", f"Task #{task_id} completed: {result['successful']}/{result['total_targets']} successful")
 
     await execute_query(
-        "UPDATE scheduled_tasks SET last_run_at = datetime('now') WHERE id = ?", (task_id,)
+        "UPDATE scheduled_tasks SET last_run_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?", (task_id,)
     )
 
 
 async def _run_autoreply_poll(task_id: int):
     """Job function: poll private messages and auto-reply."""
-    from backend.services.autoreply_service import _autoreply_running
-    if _autoreply_running:
+    from backend.api.websocket import broadcast_log
+    from backend.services.autoreply_polling import (
+        SCHEDULER_AUTOREPLY_ACCOUNTS_QUERY,
+        run_autoreply_poll_cycle,
+    )
+    from backend.services.autoreply_service import is_running
+
+    if is_running():
         logger.warning(
             "Standalone autoreply service is running. "
             "Skipping scheduler autoreply_poll (task #%d) to avoid double-replies.",
@@ -96,65 +111,15 @@ async def _run_autoreply_poll(task_id: int):
         )
         return
 
-    from backend.core.bilibili_client import BilibiliClient
-    from backend.core.bilibili_auth import BilibiliAuth
-    from backend.api.websocket import broadcast_log
+    async def on_reply_sent(account: dict, talker_id: int | str, _reply_text: str, _send_result: dict):
+        await broadcast_log("autoreply", f"[{account['name']}] Replied to {talker_id}")
 
-    accounts = await execute_query("SELECT * FROM accounts WHERE is_active = 1 AND status IN ('valid', 'expiring')")
-    configs = await execute_query(
-        "SELECT * FROM autoreply_config WHERE is_active = 1 ORDER BY priority DESC"
+    await run_autoreply_poll_cycle(
+        account_query=SCHEDULER_AUTOREPLY_ACCOUNTS_QUERY,
+        on_reply_sent=on_reply_sent,
     )
-    default_reply = next(
-        (c["response"] for c in configs if c["keyword"] is None), "您好，稍后回复。"
-    )
-    keyword_map = {c["keyword"]: c["response"] for c in configs if c["keyword"]}
-
-    for account in accounts:
-        try:
-            auth = BilibiliAuth.from_db_account(account)
-            async with BilibiliClient(auth, account_index=0) as client:
-                sessions = await client.get_recent_sessions()
-                if sessions.get("code") == 0:
-                    for session in sessions.get("data", {}).get("session_list", []) or []:
-                        talker_id = session.get("talker_id")
-                        if str(talker_id) == str(account.get("uid", 0)):
-                            continue
-                        last_msg = session.get("last_msg", {})
-                        msg_ts = last_msg.get("timestamp", 0)
-                        state_rows = await execute_query(
-                            "SELECT last_msg_ts FROM autoreply_state WHERE account_id = ? AND talker_id = ?",
-                            (account["id"], talker_id),
-                        )
-                        last_replied_ts = state_rows[0]["last_msg_ts"] if state_rows else 0
-                        if msg_ts <= last_replied_ts:
-                            continue
-                        msg_content = str(last_msg.get("content", ""))
-                        reply_text = default_reply
-                        for kw, resp in keyword_map.items():
-                            if kw in msg_content:
-                                reply_text = resp
-                                break
-                        await client.send_private_message(talker_id, reply_text)
-                        # Log to report_logs for unified activity tracking
-                        await execute_insert(
-                            """INSERT INTO report_logs (target_id, account_id, action, request_data, response_data, success, error_message)
-                               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                            (
-                                None, account["id"], "autoreply",
-                                json.dumps({"talker_id": talker_id, "reply": reply_text}),
-                                None, True, None,
-                            ),
-                        )
-                        await execute_query(
-                            "INSERT INTO autoreply_state (account_id, talker_id, last_msg_ts) VALUES (?, ?, ?) "
-                            "ON CONFLICT(account_id, talker_id) DO UPDATE SET last_msg_ts = excluded.last_msg_ts",
-                            (account["id"], talker_id, msg_ts),
-                        )
-                        await broadcast_log("autoreply", f"[{account['name']}] Replied to {talker_id}")
-        except Exception as e:
-            logger.error("[Scheduler AutoReply][%s] Error: %s", account.get("name", "?"), e)
     await execute_query(
-        "UPDATE scheduled_tasks SET last_run_at = datetime('now') WHERE id = ?", (task_id,)
+        "UPDATE scheduled_tasks SET last_run_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?", (task_id,)
     )
 
 
@@ -182,16 +147,18 @@ async def _run_cookie_health_check(task_id: int):
                             "UPDATE accounts SET status = 'expiring' WHERE id = ?",
                             (account["id"],),
                         )
+                        await invalidate_cache("active_accounts")
                 else:
                     await broadcast_log("auth", f"[{account['name']}] No refresh_token. QR re-login required.")
                     await execute_query(
                         "UPDATE accounts SET status = 'expiring' WHERE id = ?",
                         (account["id"],),
                     )
+                    await invalidate_cache("active_accounts")
         except Exception as e:
             logger.error("[Cookie Health][%s] Error: %s", account.get("name", "?"), e)
     await execute_query(
-        "UPDATE scheduled_tasks SET last_run_at = datetime('now') WHERE id = ?", (task_id,)
+        "UPDATE scheduled_tasks SET last_run_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?", (task_id,)
     )
 
 
@@ -204,7 +171,7 @@ async def _run_log_cleanup(task_id: int):
     if auto_clean not in (True, "true", "1"):
         logger.info("[Log Cleanup] auto_clean_logs is disabled, skipping")
         await execute_query(
-            "UPDATE scheduled_tasks SET last_run_at = datetime('now') WHERE id = ?", (task_id,)
+            "UPDATE scheduled_tasks SET last_run_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?", (task_id,)
         )
         return
 
@@ -229,7 +196,7 @@ async def _run_log_cleanup(task_id: int):
         await broadcast_log("system", f"Log cleanup: deleted {count} logs older than {retention_days} days")
 
     await execute_query(
-        "UPDATE scheduled_tasks SET last_run_at = datetime('now') WHERE id = ?", (task_id,)
+        "UPDATE scheduled_tasks SET last_run_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?", (task_id,)
     )
 
 _JOB_FUNCTIONS = {"report_batch": _run_report_batch, "autoreply_poll": _run_autoreply_poll, "cookie_health_check": _run_cookie_health_check, "log_cleanup": _run_log_cleanup}

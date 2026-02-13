@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import { api } from "@/lib/api";
+import { parseDateWithUtcFallback } from "@/lib/datetime";
 import { useAutoReplyConfigs, useAutoReplyStatus } from "@/lib/swr";
 import type { AutoReplyConfig } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,13 +16,43 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useConfirm } from "@/components/ConfirmDialog";
 
+const FALLBACK_DEFAULT_REPLY = "抱歉，我现在有点忙，稍后会回复你哦~";
+const RELATIVE_TIME_FORMATTER = new Intl.RelativeTimeFormat("zh-CN", { numeric: "auto" });
+
+const formatLastPollAt = (lastPollAt: string | null) => {
+  if (!lastPollAt) {
+    return "从未轮询";
+  }
+
+  const date = parseDateWithUtcFallback(lastPollAt);
+  if (Number.isNaN(date.getTime())) {
+    return "时间格式异常";
+  }
+
+  const now = Date.now();
+  const diffSeconds = Math.round((date.getTime() - now) / 1000);
+  const absDiffSeconds = Math.abs(diffSeconds);
+
+  let relativeLabel = "刚刚";
+  if (absDiffSeconds >= 86400) {
+    relativeLabel = RELATIVE_TIME_FORMATTER.format(Math.round(diffSeconds / 86400), "day");
+  } else if (absDiffSeconds >= 3600) {
+    relativeLabel = RELATIVE_TIME_FORMATTER.format(Math.round(diffSeconds / 3600), "hour");
+  } else if (absDiffSeconds >= 60) {
+    relativeLabel = RELATIVE_TIME_FORMATTER.format(Math.round(diffSeconds / 60), "minute");
+  }
+
+  const absoluteLabel = date.toLocaleString("zh-CN", { hour12: false });
+  return `${relativeLabel}（${absoluteLabel}）`;
+};
+
 export default function AutoReplyPage() {
   const { data: configs = [], mutate: mutateConfigs, isLoading: configsLoading } = useAutoReplyConfigs();
-  const { data: serviceStatus = { is_running: false, active_accounts: 0 }, mutate: mutateStatus } = useAutoReplyStatus();
+  const { data: serviceStatus = { is_running: false, active_accounts: 0, last_poll_at: null }, mutate: mutateStatus } = useAutoReplyStatus();
   const loading = configsLoading;
   const { confirm, ConfirmDialog } = useConfirm();
 
@@ -33,36 +64,56 @@ export default function AutoReplyPage() {
   const [editingRule, setEditingRule] = useState<AutoReplyConfig | null>(null);
   const [formData, setFormData] = useState({ keyword: "", response: "", priority: 0 });
   const [editFormData, setEditFormData] = useState({ keyword: "", response: "", priority: 0 });
-  const [defaultReply, setDefaultReply] = useState("抱歉，我现在有点忙，稍后会回复你哦~");
-  const [defaultReplyInitialized, setDefaultReplyInitialized] = useState(false);
+  const [defaultReplyDraft, setDefaultReplyDraft] = useState(FALLBACK_DEFAULT_REPLY);
+  const [defaultReplyDirty, setDefaultReplyDirty] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  if (defaultConfig && !defaultReplyInitialized) {
-    setDefaultReply(defaultConfig.response);
-    setDefaultReplyInitialized(true);
-  }
+  const defaultReplyValue = defaultReplyDirty
+    ? defaultReplyDraft
+    : (defaultConfig?.response ?? FALLBACK_DEFAULT_REPLY);
+
+  const resolveErrorMessage = (error: unknown, fallbackMessage: string) => {
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+    return fallbackMessage;
+  };
+
+  const handleApiError = (action: string, error: unknown, fallbackMessage: string) => {
+    console.error(`[AutoReply] ${action} failed`, error);
+    toast.error(resolveErrorMessage(error, fallbackMessage));
+  };
 
   const handleAddRule = async () => {
     try {
-      await api.autoreply.createConfig({ ...formData, is_active: true });
+      await api.autoreply.createConfig(formData);
       setShowAddModal(false);
       setFormData({ keyword: "", response: "", priority: 0 });
-      mutateConfigs();
+      await mutateConfigs();
       toast.success("规则添加成功");
-    } catch { toast.error("添加失败"); }
+    } catch (error) {
+      handleApiError("add rule", error, "添加失败");
+    }
   };
 
   const handleDeleteRule = async (id: number) => {
     if (!await confirm({ description: "确定删除此规则？", variant: "destructive", confirmText: "删除" })) return;
-    try { await api.autoreply.deleteConfig(id); mutateConfigs(); toast.success("规则已删除"); }
-    catch { toast.error("删除失败"); }
+    try {
+      await api.autoreply.deleteConfig(id);
+      await mutateConfigs();
+      toast.success("规则已删除");
+    } catch (error) {
+      handleApiError("delete rule", error, "删除失败");
+    }
   };
 
   const handleToggleRule = async (rule: AutoReplyConfig) => {
     try {
       await api.autoreply.updateConfig(rule.id, { is_active: !rule.is_active });
-      mutateConfigs();
-    } catch { toast.error("操作失败"); }
+      await mutateConfigs();
+    } catch (error) {
+      handleApiError("toggle rule", error, "操作失败");
+    }
   };
 
   const handleEditRule = (rule: AutoReplyConfig) => {
@@ -81,30 +132,33 @@ export default function AutoReplyPage() {
       await api.autoreply.updateConfig(editingRule.id, editFormData);
       setShowEditModal(false);
       setEditingRule(null);
-      mutateConfigs();
+      await mutateConfigs();
       toast.success("规则更新成功");
-    } catch { toast.error("更新失败"); }
+    } catch (error) {
+      handleApiError("update rule", error, "更新失败");
+    }
   };
 
   const handleSaveDefault = async () => {
     try {
-      const allConfigs = await api.autoreply.getConfigs();
-      const existing = allConfigs.find((c) => c.keyword === null);
-      if (existing) {
-        await api.autoreply.updateConfig(existing.id, { response: defaultReply });
-      } else {
-        await api.autoreply.createConfig({ keyword: null, response: defaultReply, priority: -1, is_active: true });
-      }
+      await api.autoreply.upsertDefaultReply(defaultReplyValue);
+      await mutateConfigs();
+      setDefaultReplyDraft(defaultReplyValue);
+      setDefaultReplyDirty(false);
       toast.success("全局配置已保存");
-    } catch { toast.error("保存失败"); }
+    } catch (error) {
+      handleApiError("save default reply", error, "保存失败");
+    }
   };
 
   const handleToggleService = async () => {
     try {
-      if (serviceStatus.is_running) { await api.autoreply.stop(); }
-      else { await api.autoreply.start(30); }
-      mutateStatus();
-    } catch { toast.error("操作失败"); }
+      if (serviceStatus.is_running) { await api.autoreply.disable(); }
+      else { await api.autoreply.enable(30); }
+      await mutateStatus();
+    } catch (error) {
+      handleApiError("toggle service", error, "操作失败");
+    }
   };
 
   const filteredRules = rules.filter(r =>
@@ -119,13 +173,14 @@ export default function AutoReplyPage() {
             <MessageSquare className="text-primary" /> 自动回复
           </h1>
           <p className="text-muted-foreground text-sm mt-1">设置关键词匹配和自动回复规则</p>
+          <p className="text-muted-foreground text-xs mt-1">此开关仅控制自动回复轮询，不会启用或停用定时任务。</p>
         </div>
         <div className="flex gap-3">
           <Button
             onClick={handleToggleService}
             variant={serviceStatus.is_running ? "destructive" : "default"}
           >
-            {serviceStatus.is_running ? '停止服务' : '启动服务'}
+            {serviceStatus.is_running ? '停用自动回复' : '启用自动回复'}
           </Button>
           <Button onClick={() => setShowAddModal(true)}>
             <Plus size={18} /> 新增规则
@@ -188,7 +243,11 @@ export default function AutoReplyPage() {
             <CardContent>
               <p className="text-xs text-muted-foreground mb-4">当没有匹配到任何关键词时，将发送此回复：</p>
               <Textarea
-                value={defaultReply} onChange={(e) => setDefaultReply(e.target.value)}
+                value={defaultReplyValue}
+                onChange={(e) => {
+                  setDefaultReplyDraft(e.target.value);
+                  setDefaultReplyDirty(true);
+                }}
                 className="h-32 resize-none"
               />
               <Button onClick={handleSaveDefault} variant="outline" className="w-full mt-4">
@@ -200,7 +259,7 @@ export default function AutoReplyPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-sm font-bold flex items-center gap-2">
-                <MessageCircle size={16} /> 服务状态
+                <MessageCircle size={16} /> 自动回复开关状态
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -210,6 +269,9 @@ export default function AutoReplyPage() {
                 </Badge>
               </div>
               <div className="text-xs text-muted-foreground">活跃账号: {serviceStatus.active_accounts}</div>
+              <div className="text-xs text-muted-foreground">
+                最后轮询: {formatLastPollAt(serviceStatus.last_poll_at)}
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -220,6 +282,9 @@ export default function AutoReplyPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>新增回复规则</DialogTitle>
+            <DialogDescription className="sr-only">
+              填写关键词、回复内容和优先级后创建自动回复规则。
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
@@ -247,6 +312,9 @@ export default function AutoReplyPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Pencil size={18} /> 编辑规则</DialogTitle>
+            <DialogDescription className="sr-only">
+              修改当前自动回复规则的关键词、回复内容和优先级。
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>

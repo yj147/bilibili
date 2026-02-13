@@ -18,6 +18,7 @@ import {
   ShieldAlert,
   Filter,
 } from "lucide-react";
+import { parseDateWithUtcFallback } from "@/lib/datetime";
 import { useAccounts, useTargets, useReportLogs } from "@/lib/swr";
 import { useLogStream } from "@/lib/websocket";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,7 +35,9 @@ function buildLast7DayCounts(logs: { executed_at: string; success: boolean }[]):
     d.setDate(d.getDate() - i);
     const dateStr = d.toISOString().slice(0, 10);
     labels.push(dayNames[d.getDay()]);
-    counts.push(logs.filter((l) => l.executed_at.slice(0, 10) === dateStr).length);
+    counts.push(
+      logs.filter((l) => parseDateWithUtcFallback(l.executed_at).toISOString().slice(0, 10) === dateStr).length
+    );
   }
   return { counts, labels };
 }
@@ -63,7 +66,15 @@ export default function Dashboard() {
     error_message: entry.type === 'error' ? entry.message : null,
     executed_at: new Date(entry.timestamp).toISOString(),
   }));
-  const logs = [...wsAsReportLogs, ...apiLogs.filter(al => !wsAsReportLogs.some(wl => wl.action === al.action && Math.abs(new Date(wl.executed_at).getTime() - new Date(al.executed_at).getTime()) < 2000))].slice(0, 50);
+  const logs = [
+    ...wsAsReportLogs,
+    ...apiLogs.filter(
+      (al) => !wsAsReportLogs.some(
+        (wl) => wl.action === al.action
+          && Math.abs(parseDateWithUtcFallback(wl.executed_at).getTime() - parseDateWithUtcFallback(al.executed_at).getTime()) < 2000
+      )
+    ),
+  ].slice(0, 50);
 
   // Bar chart: last 7 days of report activity
   const { counts: dailyCounts, labels: dayLabels } = buildLast7DayCounts(apiLogs);
@@ -71,7 +82,9 @@ export default function Dashboard() {
 
   // Today's execution: only logs whose executed_at matches today's date
   const todayStr = new Date().toISOString().slice(0, 10);
-  const todayCount = apiLogs.filter((l) => l.success && l.executed_at.slice(0, 10) === todayStr).length;
+  const todayCount = apiLogs.filter(
+    (l) => l.success && parseDateWithUtcFallback(l.executed_at).toISOString().slice(0, 10) === todayStr
+  ).length;
 
   const activeCount = accounts.filter((a) => a.status === "valid").length;
   const health = accounts.length > 0 ? Math.round((activeCount / accounts.length) * 100) : 0;
@@ -115,7 +128,7 @@ export default function Dashboard() {
     })
     .filter((l) => {
       if (timeRange === "all") return true;
-      const logDate = new Date(l.executed_at);
+      const logDate = parseDateWithUtcFallback(l.executed_at);
       const now = new Date();
       if (timeRange === "today") {
         return logDate.toISOString().slice(0, 10) === now.toISOString().slice(0, 10);
@@ -362,7 +375,7 @@ export default function Dashboard() {
                               {badge.label}
                             </span>
                             <span className="text-xs text-muted-foreground ml-auto shrink-0">
-                              {new Date(log.executed_at).toLocaleTimeString()}
+                              {parseDateWithUtcFallback(log.executed_at).toLocaleTimeString()}
                             </span>
                           </div>
                           <p className="text-xs text-muted-foreground mt-0.5 truncate">

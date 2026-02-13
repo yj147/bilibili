@@ -3,6 +3,7 @@ from backend.database import execute_query, execute_insert, get_active_accounts_
 from backend.logger import logger
 
 ALLOWED_UPDATE_FIELDS = {"name", "sessdata", "bili_jct", "buvid3", "buvid4", "dedeuserid_ckmd5", "refresh_token", "group_tag", "is_active"}
+STATUS_RESET_FIELDS = {"sessdata", "bili_jct"}
 
 
 async def list_accounts():
@@ -25,13 +26,25 @@ async def create_account(name, sessdata, bili_jct, buvid3="", buvid4="", dedeuse
 
 
 async def update_account(account_id: int, fields: dict):
+    existing_rows = await execute_query("SELECT * FROM accounts WHERE id = ?", (account_id,))
+    if not existing_rows:
+        return None
+    existing = existing_rows[0]
+
     updates, params = [], []
+    should_reset_status = False
     for field, value in fields.items():
         if value is not None and field in ALLOWED_UPDATE_FIELDS:
             updates.append(f"{field} = ?")
             params.append(value)
+            if (field in STATUS_RESET_FIELDS or field.startswith("buvid")) and existing.get(field) != value:
+                should_reset_status = True
     if not updates:
         return "no_valid_fields"
+    if should_reset_status:
+        updates.append("status = ?")
+        params.append("unknown")
+        updates.append("last_check_at = NULL")
     params.append(account_id)
     await execute_query(f"UPDATE accounts SET {', '.join(updates)} WHERE id = ?", tuple(params))
     await invalidate_cache("active_accounts")
@@ -109,7 +122,11 @@ async def check_account_validity(account_id: int):
     is_valid = data.get("code") == 0
     uid = data.get("data", {}).get("mid") if is_valid else None
     status = "valid" if is_valid else "invalid"
-    await execute_query("UPDATE accounts SET status = ?, uid = ?, last_check_at = datetime('now') WHERE id = ?",
+    await execute_query("UPDATE accounts SET status = ?, uid = ?, last_check_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?",
         (status, uid, account_id))
     await invalidate_cache("active_accounts")
     return {"id": account_id, "name": account["name"], "status": status, "is_valid": is_valid, "uid": uid}
+
+
+async def check_account_health(account_id: int):
+    return await check_account_validity(account_id)

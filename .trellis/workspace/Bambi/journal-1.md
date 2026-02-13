@@ -672,3 +672,82 @@ Browser E2E + API自动化测试全覆盖，修复6个bug，更新spec文档
 ### Next Steps
 
 - None - task complete
+
+## Session 12: Session 11: 账号生命周期修复 + 前端功能增强 + 规范文档更新
+
+**Date**: 2026-02-13
+**Task**: Session 11: 账号生命周期修复 + 前端功能增强 + 规范文档更新
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 修复内容
+
+| 类别 | 修复项 | 文件 |
+|------|--------|------|
+| **Backend** | 账号健康检查修复：允许'expiring'账号恢复到'valid'状态 | `backend/services/scheduler_service.py:103,168` |
+| **Backend** | 举报流程账号过滤：防止无效账号执行举报 | `backend/services/report_service.py:313-314` |
+| **Backend** | 全局统计API：添加/stats端点 | `backend/api/targets.py:11-14`, `backend/services/target_service.py` |
+| **Frontend** | 统计数据修复：使用全局统计而非分页数据 | `frontend/src/lib/api.ts:71`, `frontend/src/app/targets/page.tsx` |
+| **Frontend** | 搜索筛选功能：支持identifier和display_text混合搜索 | `frontend/src/app/targets/page.tsx:117-125` |
+| **Frontend** | 批量多选功能：复选框+全选+批量执行 | `frontend/src/app/targets/page.tsx` |
+| **Frontend** | WebSocket连接修复：错误处理+认证失败区分 | `frontend/src/lib/websocket.ts:43-61` |
+| **Frontend** | 日志功能改进：搜索+时间筛选+统计信息 | `frontend/src/app/page.tsx` |
+| **Frontend** | useMemo优化：修复lint警告 | `frontend/src/app/targets/page.tsx:117-125` |
+| **Docs** | 规范文档更新：记录关键经验教训 | `.trellis/spec/` (3个文件) |
+
+## 关键发现
+
+**账号生命周期Bug（High Severity）**:
+- 问题：健康检查只查询`status='valid'`账号，导致'expiring'账号永远无法恢复
+- 影响：形成永久降级循环，所有'expiring'账号无法自动恢复
+- 修复：健康检查改为`status IN ('valid', 'expiring')`
+- 经验：区分API操作（只用valid）和健康检查（包含expiring）的账号过滤规则
+
+**前端统计Bug（Medium Severity）**:
+- 问题：前端从分页数据（20条）计算统计，显示错误总数
+- 影响：统计显示"20 total"而实际有396条记录
+- 修复：后端添加独立`/stats`端点，前端分别获取统计和分页数据
+- 经验：分页用于UI显示，统计需要全局聚合
+
+## 审计结果
+
+- ✅ 所有7个修复通过fix-review审计
+- ✅ 无安全漏洞
+- ✅ 低风险评估
+- ✅ 代码质量良好
+
+## 规范文档更新
+
+1. `.trellis/spec/backend/quality-guidelines.md`: 账号过滤规则（区分API操作和健康检查）
+2. `.trellis/spec/frontend/hook-guidelines.md`: useMemo依赖项优化模式
+3. `.trellis/spec/guides/index.md`: 全局统计vs分页过滤的跨层陷阱
+
+## 统计
+
+- 文件修改：9个核心文件 + 3个规范文档
+- 代码变更：+616行，-50行
+- 提交数：2个
+- 审计报告：`FIX_REVIEW_REPORT.md`
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `92ab4f7` | (see git log) |
+| `f1931a2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

@@ -16,7 +16,8 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAccounts } from "@/lib/swr";
-import type { Account } from "@/lib/types";
+import { parseDateWithUtcFallback } from "@/lib/datetime";
+import type { Account, AccountPublic } from "@/lib/types";
 import QRLoginModal from "@/components/QRLoginModal";
 import { toast, Toaster } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -42,27 +43,41 @@ import { Textarea } from "@/components/ui/textarea";
 import { useConfirm } from "@/components/ConfirmDialog";
 
 export default function AccountsPage() {
-  const { data: accounts = [], mutate, isLoading } = useAccounts();
-  const loading = isLoading;
+  const { data: accounts = [], error, mutate, isValidating } = useAccounts();
+  const loading = isValidating;
   const { confirm, ConfirmDialog } = useConfirm();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [checkingId, setCheckingId] = useState<number | null>(null);
+  const [isCheckingAll, setIsCheckingAll] = useState(false);
   const [refreshingId, setRefreshingId] = useState<number | null>(null);
-  const notifiedRef = useRef<Set<number>>(new Set());
+  const [loadingEditId, setLoadingEditId] = useState<number | null>(null);
+  const notifiedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     for (const acc of accounts) {
-      if ((acc.status === "expiring" || acc.status === "invalid") && !notifiedRef.current.has(acc.id)) {
-        notifiedRef.current.add(acc.id);
-        if (acc.status === "expiring") {
-          toast.warning("[" + acc.name + "] Cookie 即将过期，请刷新或重新扫码登录");
-        } else if (acc.status === "invalid") {
-          toast.error("[" + acc.name + "] Cookie 已失效，请重新扫码登录");
-        }
+      if (acc.status === "valid") {
+        notifiedRef.current.delete(`${acc.id}-invalid`);
+        continue;
+      }
+      if (acc.status !== "expiring" && acc.status !== "invalid") {
+        continue;
+      }
+
+      const notifyKey = `${acc.id}-${acc.status}`;
+      if (notifiedRef.current.has(notifyKey)) {
+        continue;
+      }
+
+      notifiedRef.current.add(notifyKey);
+      if (acc.status === "expiring") {
+        toast.warning("[" + acc.name + "] Cookie 即将过期，请刷新或重新扫码登录");
+      } else if (acc.status === "invalid") {
+        toast.error("[" + acc.name + "] Cookie 已失效，请重新扫码登录");
       }
     }
   }, [accounts]);
@@ -101,18 +116,31 @@ export default function AccountsPage() {
     }
   };
 
-  const handleEdit = (acc: Account) => {
-    setEditingAccount(acc);
-    setEditFormData({
-      name: acc.name,
-      sessdata: acc.sessdata,
-      bili_jct: acc.bili_jct,
-      buvid3: acc.buvid3 || "",
-      buvid4: acc.buvid4 || "",
-      group_tag: acc.group_tag || "default",
-      is_active: acc.is_active,
-    });
-    setShowEditModal(true);
+  const handleEdit = async (acc: AccountPublic) => {
+    setLoadingEditId(acc.id);
+    try {
+      const detail = await api.accounts.get(acc.id);
+      if (typeof detail.sessdata !== "string" || typeof detail.bili_jct !== "string") {
+        toast.error("账号详情缺少凭据字段，无法编辑");
+        return;
+      }
+
+      setEditingAccount(detail);
+      setEditFormData({
+        name: detail.name,
+        sessdata: detail.sessdata,
+        bili_jct: detail.bili_jct,
+        buvid3: detail.buvid3 || "",
+        buvid4: detail.buvid4 || "",
+        group_tag: detail.group_tag || "default",
+        is_active: detail.is_active,
+      });
+      setShowEditModal(true);
+    } catch {
+      toast.error("加载账号详情失败");
+    } finally {
+      setLoadingEditId(null);
+    }
   };
 
   const handleEditSubmit = async (e: React.FormEvent) => {
@@ -143,6 +171,29 @@ export default function AccountsPage() {
       toast.error("检测失败");
     } finally {
       setCheckingId(null);
+    }
+  };
+
+  const handleCheckAll = async () => {
+    setIsCheckingAll(true);
+    try {
+      const result = await api.accounts.checkAll();
+      mutate();
+      toast.success(`批量检测完成（${result.checked} 个账号）`);
+    } catch (err) {
+      console.error("Batch check failed", err);
+      toast.error("批量检测失败");
+    } finally {
+      setIsCheckingAll(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await mutate();
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
@@ -188,6 +239,20 @@ export default function AccountsPage() {
     }
   };
 
+  const formatLastCheckAt = (lastCheckAt: string) => {
+    const date = parseDateWithUtcFallback(lastCheckAt);
+    return date.toLocaleString();
+  };
+
+  if (error) {
+    return (
+      <div className="error-state">
+        <p>加载失败: {error.message}</p>
+        <button onClick={() => mutate()}>重试</button>
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 md:p-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
@@ -200,8 +265,11 @@ export default function AccountsPage() {
           </p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" onClick={() => mutate()}>
-            <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> 刷新列表
+          <Button variant="outline" onClick={handleCheckAll} disabled={isCheckingAll}>
+            {isCheckingAll ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />} 批量检测
+          </Button>
+          <Button variant="outline" onClick={handleRefresh} disabled={isRefreshing}>
+            <RefreshCw size={16} className={isRefreshing || loading ? "animate-spin" : ""} /> 刷新列表
           </Button>
           <Button variant="secondary" onClick={() => setShowQRModal(true)}>
             <QrCode size={18} /> 扫码登录
@@ -267,7 +335,7 @@ export default function AccountsPage() {
                       </Badge>
                     </td>
                     <td className="px-6 py-4 text-xs text-muted-foreground font-mono">
-                      {acc.last_check_at ? new Date(acc.last_check_at).toLocaleString() : "从不"}
+                      {acc.last_check_at ? formatLastCheckAt(acc.last_check_at) : "从不"}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
@@ -275,9 +343,10 @@ export default function AccountsPage() {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleEdit(acc)}
+                          disabled={loadingEditId === acc.id}
                           aria-label="编辑账号"
                         >
-                          <Pencil size={16} />
+                          {loadingEditId === acc.id ? <Loader2 size={16} className="animate-spin" /> : <Pencil size={16} />}
                         </Button>
                         <Button
                           variant="ghost"

@@ -1,6 +1,6 @@
 """System Configuration Service"""
 import json
-from backend.database import execute_query, execute_insert, get_all_configs_cached, invalidate_cache
+from backend.database import execute_query, get_all_configs_cached, invalidate_cache
 
 
 async def get_config(key: str):
@@ -30,6 +30,20 @@ async def set_config(key: str, value):
     if key in ("min_delay", "max_delay"):
         try:
             v = float(value)
+            if v < 0:
+                raise ValueError(f"{key} must be >= 0")
+        except (TypeError, ValueError) as e:
+            raise ValueError(str(e))
+    if key in ("autoreply_poll_interval_seconds", "autoreply_poll_min_interval_seconds"):
+        try:
+            v = int(value)
+            if v < 1:
+                raise ValueError(f"{key} must be >= 1")
+        except (TypeError, ValueError) as e:
+            raise ValueError(str(e))
+    if key in ("autoreply_account_batch_size", "autoreply_session_batch_size"):
+        try:
+            v = int(value)
             if v < 0:
                 raise ValueError(f"{key} must be >= 0")
         except (TypeError, ValueError) as e:

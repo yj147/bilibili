@@ -57,9 +57,16 @@ class AutoReplyConfigUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
-class AutoReplyConfig(AutoReplyConfigBase):
+class AutoReplyDefaultUpsert(BaseModel):
+    response: str = Field(..., min_length=1)
+
+
+class AutoReplyConfig(BaseModel):
     id: int
-    is_active: bool = True
+    keyword: Optional[str]
+    response: str
+    priority: int
+    is_active: bool
 
     class Config:
         from_attributes = True

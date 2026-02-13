@@ -6,6 +6,7 @@ import asyncio
 import aiosqlite
 import time
 from pathlib import Path
+from typing import Awaitable, Callable, TypeVar
 from backend.config import DATABASE_PATH
 from backend.logger import logger
 
@@ -16,6 +17,7 @@ _db_initialized = False
 # Simple TTL cache
 _cache: dict[str, tuple[float, list[dict]]] = {}
 _cache_lock = asyncio.Lock()
+T = TypeVar("T")
 
 
 async def _get_connection() -> aiosqlite.Connection:
@@ -85,6 +87,22 @@ async def execute_many(query: str, params_list: list):
         conn = await _get_connection()
         await conn.executemany(query, params_list)
         await conn.commit()
+
+
+async def execute_in_transaction(
+    operation: Callable[[aiosqlite.Connection], Awaitable[T]],
+) -> T:
+    """Execute multiple statements atomically in a single transaction."""
+    async with _lock:
+        conn = await _get_connection()
+        await conn.execute("BEGIN IMMEDIATE")
+        try:
+            result = await operation(conn)
+        except Exception:
+            await conn.rollback()
+            raise
+        await conn.commit()
+        return result
 
 
 async def close_db():

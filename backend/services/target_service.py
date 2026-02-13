@@ -81,7 +81,7 @@ async def update_target(target_id: int, fields: dict):
     if not updates:
         return "no_valid_fields"
 
-    updates.append("updated_at = datetime('now')")
+    updates.append("updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')")
     params.append(target_id)
     await execute_query(
         f"UPDATE targets SET {', '.join(updates)} WHERE id = ?", tuple(params)
@@ -114,7 +114,7 @@ async def update_target_status(target_id: int, status: str):
     if status not in VALID_STATUSES:
         raise ValueError(f"Invalid target status: {status}. Must be one of {VALID_STATUSES}")
     await execute_query(
-        "UPDATE targets SET status = ?, updated_at = datetime('now') WHERE id = ?",
+        "UPDATE targets SET status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?",
         (status, target_id),
     )
 
@@ -123,7 +123,7 @@ async def increment_retry_and_set_status(target_id: int, status: str):
     if status not in VALID_STATUSES:
         raise ValueError(f"Invalid target status: {status}. Must be one of {VALID_STATUSES}")
     await execute_query(
-        "UPDATE targets SET status = ?, updated_at = datetime('now'), retry_count = retry_count + 1 WHERE id = ?",
+        "UPDATE targets SET status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'), retry_count = retry_count + 1 WHERE id = ?",
         (status, target_id),
     )
 

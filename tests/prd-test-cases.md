@@ -542,26 +542,28 @@
   - 返回成功
   - 再次 GET 已不包含该规则
 
-#### TC-F-035: 启动自动回复服务
+#### TC-F-035: 启用自动回复服务
 - **Requirement**: PRD 3.4 — 私信轮询 (P0)
 - **Priority**: High
 - **Test Steps**:
-  1. POST `/api/autoreply/start?interval=30`
+  1. POST `/api/autoreply/enable?interval=30`
   2. GET `/api/autoreply/status`
 - **Expected Results**:
-  - start 返回 `{"interval": 30}`
+  - enable 返回 `{"interval": 30}`
   - status 返回 `is_running: true`
+  - 明确仅控制自动回复轮询开关，不影响 `/api/scheduler/tasks/*`
 
-#### TC-F-036: 停止自动回复服务
+#### TC-F-036: 停用自动回复服务
 - **Requirement**: PRD 3.4
 - **Priority**: High
 - **Preconditions**: 自动回复服务已启动
 - **Test Steps**:
-  1. POST `/api/autoreply/stop`
+  1. POST `/api/autoreply/disable`
   2. GET `/api/autoreply/status`
 - **Expected Results**:
-  - stop 返回成功
+  - disable 返回成功
   - status 返回 `is_running: false`
+  - 明确仅控制自动回复轮询开关，不影响 `/api/scheduler/tasks/*`
 
 #### TC-F-037: 获取自动回复状态
 - **Requirement**: PRD 3.4
@@ -573,12 +575,12 @@
 
 ### 2. Edge Case Tests
 
-#### TC-E-016: 重复启动自动回复
+#### TC-E-016: 重复启用自动回复
 - **Requirement**: PRD 3.4
 - **Priority**: Medium
 - **Preconditions**: 服务已启动
 - **Test Steps**:
-  1. POST `/api/autoreply/start`
+  1. POST `/api/autoreply/enable`
 - **Expected Results**:
   - 返回提示已在运行或安全幂等处理
 
@@ -586,7 +588,7 @@
 - **Requirement**: PRD 3.4
 - **Priority**: Low
 - **Test Steps**:
-  1. POST `/api/autoreply/stop`（服务未启动）
+  1. POST `/api/autoreply/disable`（服务未启动）
 - **Expected Results**:
   - 返回提示未在运行或安全幂等处理
 
@@ -605,9 +607,9 @@
 - **Priority**: High
 - **Test Steps**:
   1. GET `/api/autoreply/status` → `is_running: false`
-  2. POST `/api/autoreply/start` → 成功
+  2. POST `/api/autoreply/enable` → 成功
   3. GET `/api/autoreply/status` → `is_running: true`
-  4. POST `/api/autoreply/stop` → 成功
+  4. POST `/api/autoreply/disable` → 成功
   5. GET `/api/autoreply/status` → `is_running: false`
 - **Expected Results**:
   - 状态忠实反映服务当前状态
@@ -895,7 +897,7 @@
 - **Test Steps**:
   1. 访问 `/autoreply`
   2. 检查规则列表
-  3. 测试启动/停止服务
+  3. 测试启用/停用自动回复开关（并确认不影响 scheduler 任务）
   4. 测试规则 CRUD
 - **Expected Results**:
   - 服务状态正确显示
@@ -1068,7 +1070,7 @@
 - **Requirement**: PRD 6
 - **Priority**: Medium
 - **Test Steps**:
-  1. 启动自动回复（interval=30s）
+  1. 启用自动回复（interval=30s）
   2. 发送私信
   3. 记录从发送到回复的时间
 - **Expected Results**:

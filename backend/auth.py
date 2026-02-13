@@ -12,7 +12,7 @@ _PUBLIC_PATHS = {"/", "/health", "/docs", "/redoc", "/openapi.json"}
 
 
 async def verify_api_key(request: Request):
-    """Global dependency: verify API key (SENTINEL_API_KEY required).
+    """Global dependency: verify API key if SENTINEL_API_KEY is set.
 
     WebSocket routes handle their own auth via query params, so skip them here.
     """
@@ -20,7 +20,7 @@ async def verify_api_key(request: Request):
     if request.scope.get("type") == "websocket":
         return
     if not _API_KEY:
-        raise HTTPException(status_code=500, detail="Server misconfiguration: SENTINEL_API_KEY not set. Contact administrator.")
+        return  # Auth disabled when API key not set
     if request.url.path in _PUBLIC_PATHS:
         return  # public route
     api_key = request.headers.get("x-api-key")

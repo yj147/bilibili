@@ -208,3 +208,47 @@ if rows:
     # Fix data first, then add validation
     await execute_query("DELETE FROM autoreply_config WHERE response = ''")
 ```
+
+---
+
+## Gotcha: Optional Authentication Must Not Block Startup
+
+When implementing optional API key authentication (empty = auth disabled), **never** enforce the key at startup or in the auth middleware when it's not set.
+
+**Problem**: Adding mandatory checks like this breaks development environments:
+
+```python
+# Bad — blocks startup when SENTINEL_API_KEY not set
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if not os.getenv("SENTINEL_API_KEY"):
+        raise RuntimeError("SENTINEL_API_KEY required but not set")
+```
+
+```python
+# Bad — returns 500 when auth is supposed to be optional
+async def verify_api_key(request: Request):
+    if not _API_KEY:
+        raise HTTPException(status_code=500, detail="SENTINEL_API_KEY not set")
+```
+
+**Why it's bad**: Optional authentication means the system should work **without** the key. Enforcing it defeats the purpose and breaks local development.
+
+**Correct pattern**:
+
+```python
+# Good — skip auth when key not set
+async def verify_api_key(request: Request):
+    if request.scope.get("type") == "websocket":
+        return  # WebSocket handles own auth
+    if not _API_KEY:
+        return  # Auth disabled when API key not set
+    if request.url.path in _PUBLIC_PATHS:
+        return
+    api_key = request.headers.get("x-api-key")
+    if api_key and hmac.compare_digest(api_key, _API_KEY):
+        return
+    raise HTTPException(status_code=401, detail="Invalid or missing API key")
+```
+
+**Key principle**: When a security feature is optional, the absence of configuration should **disable** the feature, not **block** the application.

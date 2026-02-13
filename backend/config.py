@@ -4,6 +4,14 @@ Bili-Sentinel Backend Configuration
 import os
 from pathlib import Path
 
+
+def _get_int_env(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
 # Base paths
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
@@ -34,6 +42,20 @@ WORKERS = int(os.getenv("SENTINEL_WORKERS", "1"))
 MIN_DELAY = 3.0  # seconds (raised from 2.0 for safety)
 MAX_DELAY = 12.0  # seconds (raised from 10.0)
 ACCOUNT_COOLDOWN = 90.0  # seconds between same account's consecutive reports (B站 requires ~90-120s)
+
+# Auto-reply polling defaults
+AUTOREPLY_POLL_INTERVAL_SECONDS = max(
+    _get_int_env("SENTINEL_AUTOREPLY_POLL_INTERVAL_SECONDS", 30), 1
+)
+AUTOREPLY_POLL_MIN_INTERVAL_SECONDS = max(
+    _get_int_env("SENTINEL_AUTOREPLY_POLL_MIN_INTERVAL_SECONDS", 10), 1
+)
+AUTOREPLY_ACCOUNT_BATCH_SIZE = max(
+    _get_int_env("SENTINEL_AUTOREPLY_ACCOUNT_BATCH_SIZE", 0), 0
+)
+AUTOREPLY_SESSION_BATCH_SIZE = max(
+    _get_int_env("SENTINEL_AUTOREPLY_SESSION_BATCH_SIZE", 0), 0
+)
 
 USER_AGENTS = [
     # Chrome (Windows)

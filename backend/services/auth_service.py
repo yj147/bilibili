@@ -1,7 +1,7 @@
 """QR code login and cookie refresh service."""
 import re
 import httpx
-from backend.database import execute_query
+from backend.database import execute_query, invalidate_cache
 from backend.config import USER_AGENTS
 from backend.logger import logger
 
@@ -109,11 +109,12 @@ async def qr_login_save(qrcode_key: str, account_name: str) -> dict:
             account_id = existing[0]["id"]
             await execute_query(
                 """UPDATE accounts SET sessdata = ?, bili_jct = ?, dedeuserid_ckmd5 = ?,
-                   refresh_token = ?, status = 'valid', last_check_at = datetime('now'),
+                   refresh_token = ?, status = 'valid', last_check_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'),
                    name = CASE WHEN name LIKE 'QR_%' THEN ? ELSE name END
                    WHERE id = ?""",
                 (sessdata, bili_jct, ckmd5, refresh_token, account_name, account_id),
             )
+            await invalidate_cache("active_accounts")
             # Fetch buvid cookies
             buvid = await _fetch_buvid(sessdata, bili_jct)
             if buvid["buvid3"] or buvid["buvid4"]:
@@ -135,9 +136,10 @@ async def qr_login_save(qrcode_key: str, account_name: str) -> dict:
     )
     if uid:
         await execute_query(
-            "UPDATE accounts SET uid = ?, refresh_token = ?, status = 'valid', last_check_at = datetime('now') WHERE id = ?",
+            "UPDATE accounts SET uid = ?, refresh_token = ?, status = 'valid', last_check_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?",
             (uid, refresh_token, account["id"]),
         )
+        await invalidate_cache("active_accounts")
     # Fetch buvid cookies
     buvid = await _fetch_buvid(sessdata, bili_jct)
     if buvid["buvid3"] or buvid["buvid4"]:
@@ -259,9 +261,10 @@ async def refresh_account_cookies(account_id: int) -> dict:
             # Step 5: Update DB
             await execute_query(
                 """UPDATE accounts SET sessdata = ?, bili_jct = ?, refresh_token = ?,
-                   status = 'valid', last_check_at = datetime('now') WHERE id = ?""",
+                   status = 'valid', last_check_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?""",
                 (new_sessdata, new_bili_jct, new_refresh_token, account_id),
             )
+            await invalidate_cache("active_accounts")
             logger.info("[Auth] Cookies refreshed for account %d", account_id)
             return {"success": True, "message": "Cookies refreshed successfully"}
 

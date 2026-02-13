@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 11
-- **Last Active**: 2026-02-12
+- **Total Sessions**: 12
+- **Last Active**: 2026-02-13
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~674 | Active |
+| `journal-1.md` | ~753 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits |
 |---|------|-------|---------|
+| 12 | 2026-02-13 | Session 11: 账号生命周期修复 + 前端功能增强 + 规范文档更新 | `92ab4f7`, `f1931a2` |
 | 11 | 2026-02-12 | 前后端集成安全、性能、UX 修复 | `2f9cfc8` |
 | 10 | 2026-02-12 | Session 10: Variant漏洞修复完成 (V-09, V-12 + 一致性修复) | `7ee2a2a`, `9fcf220` |
 | 9 | 2026-02-12 | Variant Analysis + 8个安全漏洞修复 | `441b25b` |

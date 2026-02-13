@@ -47,6 +47,29 @@ export interface AccountCreate {
   group_tag?: string | null;
 }
 
+export interface AccountImport {
+  name: string;
+  sessdata: string;
+  bili_jct: string;
+  buvid3: string | null;
+  buvid4: string | null;
+  dedeuserid_ckmd5: string | null;
+  group_tag: string | null;
+}
+
+export interface AccountPublic {
+  id: number;
+  name: string;
+  uid: number | null;
+  buvid3: string | null;
+  buvid4: string | null;
+  group_tag: string | null;
+  is_active: boolean;
+  last_check_at: string | null;
+  status: string;
+  created_at: string;
+}
+
 export interface AccountStatus {
   id: number;
   name: string;
@@ -68,10 +91,10 @@ export interface AccountUpdate {
 }
 
 export interface AutoReplyConfig {
+  id: number;
   keyword: string | null;
   response: string;
   priority: number;
-  id: number;
   is_active: boolean;
 }
 
@@ -92,6 +115,10 @@ export interface AutoReplyConfigUpdate {
   response?: string | null;
   priority?: number | null;
   is_active?: boolean | null;
+}
+
+export interface AutoReplyDefaultUpsert {
+  response: string;
 }
 
 export interface AutoReplyStatus {

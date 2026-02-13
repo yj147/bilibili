@@ -69,6 +69,7 @@ graph TB
 │   │   ├── target_service.py
 │   │   ├── report_service.py
 │   │   ├── autoreply_service.py
+│   │   ├── autoreply_polling.py
 │   │   └── scheduler_service.py
 │   │
 │   ├── core/                   # 核心引擎（现有代码迁移）
@@ -213,9 +214,14 @@ CREATE TABLE scheduled_tasks (
 | POST | `/config` | 添加关键词回复 |
 | PUT | `/config/{id}` | 更新回复配置 |
 | DELETE | `/config/{id}` | 删除回复配置 |
-| POST | `/start` | 启动自动回复服务 |
-| POST | `/stop` | 停止自动回复服务 |
+| POST | `/enable` | 启用自动回复轮询开关（仅自动回复，不影响 scheduler 任务） |
+| POST | `/disable` | 停用自动回复轮询开关（仅自动回复，不影响 scheduler 任务） |
 | GET | `/status` | 获取服务状态 |
+
+自动回复规则匹配顺序：
+- 仅加载 `is_active = 1` 的规则
+- 按 `priority DESC, id ASC` 排序，`priority` 相同按创建顺序（`id` 升序）匹配
+- 按顺序命中第一条关键词规则即返回；未命中时使用默认回复（`keyword = NULL`），若未配置则回退系统文案
 
 ### 4.5 定时任务 `/api/scheduler`
 | 方法 | 路径 | 描述 |
@@ -261,6 +267,20 @@ class SchedulerService:
     async def toggle_task(task_id: int) -> bool
     async def execute_now(task_id: int)
 ```
+
+### 5.4 AutoReply 与 Scheduler 职责边界
+
+| 模块 | 职责 | 非职责 |
+|------|------|--------|
+| `autoreply_service.py` | 自动回复规则 CRUD、独立开关（start/stop/status） | 不负责 APScheduler 任务注册/触发 |
+| `autoreply_polling.py` | 单次轮询执行（拉取会话、规则匹配、发送回复、状态去重、日志落库） | 不负责定时策略与任务生命周期 |
+| `scheduler_service.py` | 任务编排（Cron/Interval 注册、触发时机、任务状态更新） | 不实现自动回复业务细节 |
+
+当前调用关系：
+- 独立模式：`autoreply_service.start_service()` 周期性调用 `autoreply_polling.run_autoreply_poll_cycle()`
+- 定时任务模式：`scheduler_service._run_autoreply_poll()` 仅负责调度，并调用同一个 `run_autoreply_poll_cycle()`
+
+这样保证自动回复业务逻辑只有一份实现，避免 `autoreply_service` 与 `scheduler_service` 之间边界漂移。
 
 ---
 

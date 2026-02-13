@@ -2,7 +2,14 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import List
 
-from backend.models.task import AutoReplyConfig, AutoReplyConfigCreate, AutoReplyConfigUpdate, AutoReplyStatus
+from backend.config import AUTOREPLY_POLL_INTERVAL_SECONDS
+from backend.models.task import (
+    AutoReplyConfig,
+    AutoReplyConfigCreate,
+    AutoReplyConfigUpdate,
+    AutoReplyDefaultUpsert,
+    AutoReplyStatus,
+)
 from backend.services import autoreply_service
 
 router = APIRouter()
@@ -18,6 +25,12 @@ async def list_autoreply_configs():
 async def create_autoreply_config(config: AutoReplyConfigCreate):
     """Add a new auto-reply configuration."""
     return await autoreply_service.create_config(config.keyword, config.response, config.priority)
+
+
+@router.put("/config/default", response_model=AutoReplyConfig)
+async def upsert_default_reply(config: AutoReplyDefaultUpsert):
+    """Create or update default auto-reply atomically."""
+    return await autoreply_service.upsert_default_reply(config.response)
 
 
 @router.put("/config/{config_id}", response_model=AutoReplyConfig)
@@ -41,23 +54,46 @@ async def delete_autoreply_config(config_id: int):
 
 @router.get("/status", response_model=AutoReplyStatus)
 async def get_autoreply_status():
-    """Get the current auto-reply service status."""
+    """Get the standalone auto-reply switch status (not scheduler task status)."""
     return await autoreply_service.get_status()
 
 
-@router.post("/start")
-async def start_autoreply_service(interval: int = Query(default=30, ge=10)):
-    """Start the auto-reply polling service."""
+@router.post("/enable")
+async def enable_autoreply_service(
+    interval: int = Query(default=AUTOREPLY_POLL_INTERVAL_SECONDS, ge=1)
+):
+    """Enable standalone auto-reply polling. This does not toggle scheduler tasks."""
     started = await autoreply_service.start_service(interval)
     if not started:
-        return {"message": "Auto-reply service is already running"}
-    return {"message": "Auto-reply service started", "interval": interval}
+        return {"message": "Auto-reply feature is already enabled (standalone mode)"}
+    return {
+        "message": "Auto-reply feature enabled (standalone mode)",
+        "interval": interval,
+        "affects_scheduler_tasks": False,
+    }
 
 
-@router.post("/stop")
-async def stop_autoreply_service():
-    """Stop the auto-reply polling service."""
+@router.post("/disable")
+async def disable_autoreply_service():
+    """Disable standalone auto-reply polling. This does not toggle scheduler tasks."""
     stopped = await autoreply_service.stop_service()
     if not stopped:
-        return {"message": "Auto-reply service is not running"}
-    return {"message": "Auto-reply service stopped"}
+        return {"message": "Auto-reply feature is already disabled (standalone mode)"}
+    return {
+        "message": "Auto-reply feature disabled (standalone mode)",
+        "affects_scheduler_tasks": False,
+    }
+
+
+@router.post("/start", deprecated=True)
+async def start_autoreply_service(
+    interval: int = Query(default=AUTOREPLY_POLL_INTERVAL_SECONDS, ge=1)
+):
+    """Deprecated alias of /enable. Controls standalone auto-reply only."""
+    return await enable_autoreply_service(interval)
+
+
+@router.post("/stop", deprecated=True)
+async def stop_autoreply_service():
+    """Deprecated alias of /disable. Controls standalone auto-reply only."""
+    return await disable_autoreply_service()

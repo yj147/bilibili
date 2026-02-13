@@ -30,6 +30,17 @@ async def create_account(account: AccountCreate):
         account.name, account.sessdata, account.bili_jct,
         account.buvid3 or "", account.buvid4 or "", account.dedeuserid_ckmd5 or "", account.group_tag or "default")
 
+
+@router.post("/check-all")
+async def check_all_accounts():
+    accounts = await account_service.list_accounts()
+    results = []
+    for acc in accounts:
+        result = await account_service.check_account_health(acc["id"])
+        if result:
+            results.append(result)
+    return {"checked": len(results), "results": results}
+
 @router.get("/{account_id}", response_model=AccountPublic)
 async def get_account(account_id: int):
     result = await account_service.get_account(account_id)

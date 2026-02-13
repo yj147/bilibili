@@ -1,5 +1,5 @@
 import useSWR from 'swr';
-import type { Account, TargetListResponse, ReportLog, AutoReplyConfig, AutoReplyStatus, ScheduledTask } from './types';
+import type { AccountPublic, TargetListResponse, ReportLog, AutoReplyConfig, AutoReplyStatus, ScheduledTask } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || '/api';
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || '';
@@ -12,7 +12,7 @@ const fetcher = (path: string) => fetch(`${API_BASE}${path}`, {
 });
 
 export function useAccounts() {
-  return useSWR<Account[]>('/accounts/', fetcher, { refreshInterval: 30000 });
+  return useSWR<AccountPublic[]>('/accounts/', fetcher, { refreshInterval: 30000 });
 }
 
 export function useTargets(params: Record<string, string> = {}) {

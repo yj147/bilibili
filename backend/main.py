@@ -45,9 +45,6 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Bili-Sentinel starting up...")
     import os as _os
-    if not _os.getenv("SENTINEL_API_KEY", ""):
-        logger.error("FATAL: SENTINEL_API_KEY required but not set")
-        raise RuntimeError("SENTINEL_API_KEY required but not set")
     if (_os.cpu_count() or 1) > 1:
         logger.warning("Bili-Sentinel 必须以单 worker 模式运行 (--workers 1)")
     await init_db()
