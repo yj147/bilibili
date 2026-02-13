@@ -69,6 +69,34 @@ export function useTargets(params: Record<string, string> = {}) {
 
 **Why**: Reduces API requests by 80% while maintaining responsive UX through focus-based revalidation.
 
+### useMemo Dependency Optimization
+
+**Problem**: ESLint warning "The 'allTargets' logical expression could make the dependencies of useMemo Hook change on every render."
+
+**Cause**: Computed values created outside useMemo and used in dependency array cause the hook to see a new reference on every render.
+
+```typescript
+// Bad — allTargets is computed outside, causes lint warning
+const allTargets = targetData?.items ?? [];
+const targets = useMemo(() => {
+  if (!searchKeyword.trim()) return allTargets;
+  return allTargets.filter(t => t.identifier.includes(searchKeyword));
+}, [allTargets, searchKeyword]);  // allTargets changes every render
+```
+
+**Solution**: Move computed values inside useMemo and depend on the source data directly.
+
+```typescript
+// Good — compute inside useMemo, depend on source
+const targets = useMemo(() => {
+  const allTargets = targetData?.items ?? [];
+  if (!searchKeyword.trim()) return allTargets;
+  return allTargets.filter(t => t.identifier.includes(searchKeyword));
+}, [targetData?.items, searchKeyword]);  // Stable reference
+```
+
+**Why**: `targetData?.items` has a stable reference (only changes when SWR refetches), while `allTargets` would be a new array on every render.
+
 ---
 
 ## WebSocket Hook (`lib/websocket.ts`)

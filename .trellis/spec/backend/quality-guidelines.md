@@ -185,19 +185,29 @@ from backend.config import USER_AGENTS
 USER_AGENTS = ["Mozilla/5.0 ...", ...]  # Already defined in config.py!
 ```
 
-### 8. Account Filtering: Always Use `status='valid'`
+### 8. Account Filtering: Context-Dependent Status Filtering
 
-When querying accounts for any operation that calls B站 API (reporting, scanning, etc.), always filter by `status = 'valid'` in addition to `is_active = 1`. Accounts with `status = 'expiring'` have invalid credentials and will fail with -352.
+**For B站 API Operations (reporting, scanning)**: Always filter by `status = 'valid'` in addition to `is_active = 1`. Accounts with `status = 'expiring'` have invalid credentials and will fail with -352.
 
 ```python
-# Good — filter by both is_active and status
+# Good — filter by both is_active and status for API calls
 await execute_query("SELECT * FROM accounts WHERE is_active = 1 AND status = 'valid'")
 
 # Bad — includes expired/invalid accounts
 await execute_query("SELECT * FROM accounts WHERE is_active = 1")
 ```
 
-> **Gotcha**: This applies everywhere accounts are queried for B站 API calls — `account_service.get_active_accounts()`, direct SQL in `report_service`, and `scheduler_service`. Missing this in any one place causes fake accounts to be used.
+**For Health Checks (cookie validation)**: Must include BOTH `status = 'valid'` AND `status = 'expiring'` accounts. Health checks are the mechanism that allows 'expiring' accounts to recover to 'valid' status.
+
+```python
+# Good — health check includes expiring accounts
+await execute_query("SELECT * FROM accounts WHERE is_active = 1 AND status IN ('valid', 'expiring')")
+
+# Bad — creates permanent loop where expiring accounts never recover
+await execute_query("SELECT * FROM accounts WHERE is_active = 1 AND status = 'valid'")
+```
+
+> **Critical Gotcha**: If health checks exclude 'expiring' accounts, those accounts can NEVER recover to 'valid' status, creating a permanent degradation loop. This was discovered in Session 11 when all 'expiring' accounts remained stuck indefinitely.
 
 ### 9. Scheduler Must Delegate to Service Layer
 

@@ -37,3 +37,37 @@ Next.js Page
 | JSON columns | SQLite TEXT -> Python dict -> TS Record<string, unknown> |
 | Booleans | SQLite INTEGER (0/1) -> Python bool -> JSON true/false |
 | Pagination | `{ items, total, page, page_size }` contract |
+
+### Common Cross-Layer Gotchas
+
+#### Gotcha: Global Statistics vs Pagination Filtering
+
+**Problem**: Frontend calculates statistics from paginated data, showing incorrect totals.
+
+**Symptom**: Statistics show "20 total targets" when there are actually 396 in the database.
+
+**Cause**: Frontend filters `targetData?.items` (only 20 items from current page) instead of querying global statistics.
+
+```typescript
+// Bad — statistics from paginated data
+const { data: targetData } = useTargets({ page: 1, page_size: 20 });
+const total = targetData?.items.length ?? 0;  // Always ≤20!
+```
+
+**Solution**: Add dedicated backend endpoint for global statistics, fetch separately from paginated data.
+
+```python
+# Backend: Add /stats endpoint
+@router.get("/stats")
+async def get_targets_stats():
+    rows = await execute_query("SELECT status, COUNT(*) as count FROM targets GROUP BY status")
+    return {"total": sum(...), "pending": ..., "completed": ...}
+```
+
+```typescript
+// Frontend: Fetch global stats separately
+const { data: stats } = useSWR('/targets/stats', fetcher);
+const { data: targetData } = useTargets({ page: 1, page_size: 20 });
+```
+
+**Why**: Pagination is for UI display; statistics require aggregation across ALL records.

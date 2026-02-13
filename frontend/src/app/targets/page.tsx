@@ -113,16 +113,16 @@ export default function TargetsPage() {
 
   const { data: targetData, mutate, isLoading } = useTargets(queryParams);
   const { data: accounts = [] } = useAccounts();
-  const allTargets = targetData?.items ?? [];
 
   const targets = useMemo(() => {
+    const allTargets = targetData?.items ?? [];
     if (!searchKeyword.trim()) return allTargets;
     const keyword = searchKeyword.toLowerCase();
     return allTargets.filter(t =>
       t.identifier.toLowerCase().includes(keyword) ||
       (t.display_text && t.display_text.toLowerCase().includes(keyword))
     );
-  }, [allTargets, searchKeyword]);
+  }, [targetData?.items, searchKeyword]);
 
   const total = targets.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
