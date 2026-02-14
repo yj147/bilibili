@@ -4,15 +4,35 @@ from backend.logger import logger
 
 ALLOWED_UPDATE_FIELDS = {"name", "sessdata", "bili_jct", "buvid3", "buvid4", "dedeuserid_ckmd5", "refresh_token", "group_tag", "is_active"}
 STATUS_RESET_FIELDS = {"sessdata", "bili_jct"}
+_PUBLIC_COLUMNS = "id, name, uid, buvid3, buvid4, group_tag, is_active, last_check_at, status, created_at"
 
 
-async def list_accounts():
-    return await execute_query("SELECT * FROM accounts ORDER BY created_at DESC")
+async def list_accounts(page: int = 1, page_size: int = 50):
+    """List accounts with pagination, excluding credentials."""
+    offset = (page - 1) * page_size
+    items = await execute_query(
+        f"SELECT {_PUBLIC_COLUMNS} FROM accounts ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        (page_size, offset)
+    )
+    count_result = await execute_query("SELECT COUNT(*) as total FROM accounts")
+    total = count_result[0]["total"] if count_result else 0
+    return {"items": items, "total": total, "page": page, "page_size": page_size}
 
 
 async def get_account(account_id: int):
     rows = await execute_query("SELECT * FROM accounts WHERE id = ?", (account_id,))
     return rows[0] if rows else None
+
+
+async def get_account_public(account_id: int):
+    """Get account by ID, excluding credentials."""
+    rows = await execute_query(f"SELECT {_PUBLIC_COLUMNS} FROM accounts WHERE id = ?", (account_id,))
+    return rows[0] if rows else None
+
+
+async def list_accounts_internal():
+    """List all account IDs and names for internal operations."""
+    return await execute_query("SELECT id, name FROM accounts ORDER BY created_at DESC")
 
 
 async def create_account(name, sessdata, bili_jct, buvid3="", buvid4="", dedeuserid_ckmd5="", group_tag="default"):

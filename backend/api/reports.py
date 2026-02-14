@@ -36,7 +36,7 @@ async def _run_batch_in_background(target_ids: list[int] | None, account_ids: li
         logger.error("Background batch execution failed: %s", e)
 
 
-@router.post("/execute")
+@router.post("/execute", status_code=202)
 async def execute_report(request: ReportExecuteRequest):
     """Fire-and-forget: immediately returns, processes report in background."""
     from backend.services import target_service
@@ -70,7 +70,7 @@ async def execute_report(request: ReportExecuteRequest):
     return {"status": "accepted", "target_id": request.target_id, "message": "Report queued for execution"}
 
 
-@router.post("/execute/batch")
+@router.post("/execute/batch", status_code=202)
 async def execute_batch_reports(request: ReportBatchExecuteRequest):
     """Fire-and-forget: immediately returns, processes batch in background."""
     task = None
@@ -100,9 +100,9 @@ async def get_report_logs(limit: int = Query(default=100, ge=1, le=1000)):
 
 
 @router.get("/logs/{target_id}", response_model=List[ReportLog])
-async def get_target_logs(target_id: int):
+async def get_target_logs(target_id: int, limit: int = Query(default=100, ge=1, le=1000)):
     """Get logs for a specific target."""
-    return await report_service.get_target_logs(target_id)
+    return await report_service.get_target_logs(target_id, limit)
 
 
 @router.post("/scan-comments", response_model=CommentScanResult)

@@ -55,16 +55,12 @@ async def websocket_logs(websocket: WebSocket):
                     subprotocol = header_value
                 break
 
-    await websocket.accept(subprotocol=subprotocol)
-
     if api_key:
-        if not token:
-            await websocket.close(code=1008, reason="API key required")
+        if not token or not hmac.compare_digest(token, api_key):
+            await websocket.close(code=1008, reason="Unauthorized")
             return
 
-        if not hmac.compare_digest(token, api_key):
-            await websocket.close(code=4001, reason="Unauthorized")
-            return
+    await websocket.accept(subprotocol=subprotocol)
     _clients.append(websocket)
     
     try:

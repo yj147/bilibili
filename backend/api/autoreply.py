@@ -89,11 +89,15 @@ async def disable_autoreply_service():
 async def start_autoreply_service(
     interval: int = Query(default=AUTOREPLY_POLL_INTERVAL_SECONDS, ge=1)
 ):
-    """Deprecated alias of /enable. Controls standalone auto-reply only."""
+    """Deprecated: use /enable instead. Will be removed after 2026-06-01."""
+    from backend.logger import logger
+    logger.warning("Deprecated endpoint /autoreply/start called; use /enable instead")
     return await enable_autoreply_service(interval)
 
 
 @router.post("/stop", deprecated=True)
 async def stop_autoreply_service():
-    """Deprecated alias of /disable. Controls standalone auto-reply only."""
+    """Deprecated: use /disable instead. Will be removed after 2026-06-01."""
+    from backend.logger import logger
+    logger.warning("Deprecated endpoint /autoreply/stop called; use /disable instead")
     return await disable_autoreply_service()

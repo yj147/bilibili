@@ -911,3 +911,63 @@ Browser E2E + API自动化测试全覆盖，修复6个bug，更新spec文档
 ### Next Steps
 
 - None - task complete
+
+## Session 15: Cookie自动刷新修复 + 自动回复深度修复
+
+**Date**: 2026-02-14
+**Task**: Cookie自动刷新修复 + 自动回复深度修复
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 修复内容
+
+| 类别 | 修复项 | 文件 |
+|------|--------|------|
+| Cookie刷新 | RSA公钥修正（与bilibili-api-python一致） | `backend/services/auth_service.py` |
+| Cookie刷新 | correspond端点添加buvid3 + Accept-Encoding | `backend/services/auth_service.py` |
+| Cookie刷新 | 时间戳改为毫秒级（秒级返回404） | `backend/services/auth_service.py` |
+| API迁移 | get_sessions迁移到session_svr端点 | `backend/core/bilibili_client.py` |
+| 自动回复 | 始终更新去重状态（防无限重试） | `backend/services/autoreply_polling.py` |
+| 自动回复 | sender_uid自发消息过滤 | `backend/services/autoreply_polling.py` |
+| 自动回复 | 21046速率限制断路器 | `backend/services/autoreply_polling.py` |
+| 自动回复 | 3秒发送间隔防护 | `backend/services/autoreply_polling.py` |
+| 配置 | session_batch_size默认值0→5 | `backend/config.py`, `backend/db/schema.sql` |
+| 安全 | pycryptodome加入requirements.txt | `backend/requirements.txt` |
+| 测试 | 断言匹配新行为 + mock补充sender_uid | `backend/tests/test_autoreply_service.py` |
+| 规范 | Cookie刷新流程修正 + 自动回复模式文档 | `.trellis/spec/backend/quality-guidelines.md` |
+
+## 关键发现
+
+- **RSA公钥错误**：第三行与bilibili-api-python不一致，导致correspond端点始终404
+- **Accept-Encoding**：httpx默认发送br（brotli），但未安装brotli包导致解码失败
+- **毫秒 vs 秒**：B站要求毫秒级时间戳，秒级直接404
+- **去重状态**：旧逻辑仅在发送成功时更新状态，持续失败导致无限重试
+
+## 验证
+
+- Cookie刷新：API返回 `{"success":true,"message":"Cookies refreshed successfully"}`
+- 自动回复：成功接收私信并匹配规则（B站24h限流中，发送被拦截属正常）
+- 测试：28/28 全部通过
+- 变体分析：全代码库扫描未发现类似问题
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `858b822` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

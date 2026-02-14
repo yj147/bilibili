@@ -1,8 +1,10 @@
 """Account Management API Routes"""
+import asyncio
 from fastapi import APIRouter, HTTPException, Query
 from typing import List
 from backend.models.account import Account, AccountCreate, AccountUpdate, AccountStatus, AccountPublic, AccountImport
 from backend.services import account_service
+from backend.logger import logger
 
 router = APIRouter()
 
@@ -10,6 +12,8 @@ router = APIRouter()
 @router.get("/export")
 async def export_accounts(include_credentials: bool = Query(False)):
     """Export all accounts as JSON."""
+    if include_credentials:
+        logger.warning("AUDIT: Credential export requested (include_credentials=True)")
     return await account_service.export_accounts(include_credentials)
 
 
@@ -20,9 +24,12 @@ async def import_accounts(accounts: List[AccountImport]):
         raise HTTPException(status_code=400, detail="Maximum 500 accounts per import")
     return await account_service.import_accounts([a.model_dump() for a in accounts])
 
-@router.get("/", response_model=List[AccountPublic])
-async def list_accounts():
-    return await account_service.list_accounts()
+@router.get("/")
+async def list_accounts(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+):
+    return await account_service.list_accounts(page, page_size)
 
 @router.post("/", response_model=AccountPublic)
 async def create_account(account: AccountCreate):
@@ -31,19 +38,37 @@ async def create_account(account: AccountCreate):
         account.buvid3 or "", account.buvid4 or "", account.dedeuserid_ckmd5 or "", account.group_tag or "default")
 
 
-@router.post("/check-all")
+_check_all_running = False
+
+async def _check_all_in_background():
+    global _check_all_running
+    try:
+        accounts = await account_service.list_accounts_internal()
+        sem = asyncio.Semaphore(3)
+        async def check_one(acc):
+            async with sem:
+                return await account_service.check_account_health(acc["id"])
+        tasks = [check_one(acc) for acc in accounts]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        valid = [r for r in results if isinstance(r, dict)]
+        logger.info("check-all complete: %d/%d accounts checked", len(valid), len(accounts))
+    except Exception as e:
+        logger.error("check-all background task failed: %s", e)
+    finally:
+        _check_all_running = False
+
+@router.post("/check-all", status_code=202)
 async def check_all_accounts():
-    accounts = await account_service.list_accounts()
-    results = []
-    for acc in accounts:
-        result = await account_service.check_account_health(acc["id"])
-        if result:
-            results.append(result)
-    return {"checked": len(results), "results": results}
+    global _check_all_running
+    if _check_all_running:
+        raise HTTPException(status_code=409, detail="Health check already in progress")
+    _check_all_running = True
+    asyncio.create_task(_check_all_in_background())
+    return {"status": "accepted", "message": "Account health check queued"}
 
 @router.get("/{account_id}", response_model=AccountPublic)
 async def get_account(account_id: int):
-    result = await account_service.get_account(account_id)
+    result = await account_service.get_account_public(account_id)
     if not result:
         raise HTTPException(status_code=404, detail="Account not found")
     return result

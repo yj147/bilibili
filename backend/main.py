@@ -2,9 +2,12 @@
 Bili-Sentinel FastAPI Application Entry Point
 """
 import os
+import time as _time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse as _JSONResponse
 
 from backend.database import init_db, close_db
 from backend.logger import logger
@@ -12,6 +15,40 @@ from backend.config import DEBUG
 from backend.middleware import register_exception_handlers
 from backend.auth import verify_api_key
 from backend.api import accounts, targets, reports, autoreply, scheduler, websocket, config, auth
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Simple in-memory rate limiter for single-worker deployment."""
+    RATE_LIMITS: dict[str, tuple[int, int]] = {
+        "/api/reports/execute": (10, 60),
+        "/api/reports/execute/batch": (5, 60),
+        "/api/accounts/check-all": (3, 60),
+        "/api/reports/scan-comments": (5, 60),
+    }
+
+    def __init__(self, app):
+        super().__init__(app)
+        self._requests: dict[str, list[float]] = {}
+
+    async def dispatch(self, request, call_next):
+        path = request.url.path
+        limit_config = self.RATE_LIMITS.get(path)
+        if not limit_config:
+            return await call_next(request)
+        max_requests, window = limit_config
+        client_ip = request.client.host if request.client else "unknown"
+        key = f"{client_ip}:{path}"
+        now = _time.monotonic()
+        timestamps = [t for t in self._requests.get(key, []) if now - t < window]
+        if len(timestamps) >= max_requests:
+            return _JSONResponse(
+                status_code=429,
+                content={"error": True, "code": 429, "detail": "Rate limit exceeded. Try again later."},
+                headers={"Retry-After": str(window)},
+            )
+        timestamps.append(now)
+        self._requests[key] = timestamps
+        return await call_next(request)
 
 
 async def _background_wbi_refresh():
@@ -111,6 +148,9 @@ app.add_middleware(
     allow_headers=["Content-Type", "X-API-Key"],
 )
 
+# Rate limiting middleware
+app.add_middleware(RateLimitMiddleware)
+
 # Include routers (auth on HTTP routers only, WebSocket handles its own auth)
 _auth_deps = [Depends(verify_api_key)]
 app.include_router(accounts.router, prefix="/api/accounts", tags=["Accounts"], dependencies=_auth_deps)
@@ -133,7 +173,7 @@ async def health_check():
     return {"status": "healthy"}
 
 
-@app.get("/api/system/info")
+@app.get("/api/system/info", dependencies=[Depends(verify_api_key)])
 async def system_info():
     import platform
     from backend.database import execute_query

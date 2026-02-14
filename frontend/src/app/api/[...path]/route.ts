@@ -28,7 +28,7 @@ async function handler(req: NextRequest) {
   }
 
   // Normalize path to prevent traversal
-  const normalizedPath = pathname.replace(/\/\.\./g, '').replace(/\/\//g, '/');
+  const normalizedPath = new URL(pathname, 'http://localhost').pathname;
   const targetUrl = `${BACKEND_URL}${normalizedPath}${url.search}`;
 
   const headers = new Headers();

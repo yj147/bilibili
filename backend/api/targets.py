@@ -80,11 +80,17 @@ async def delete_target(target_id: int):
     return {"message": "Target deleted", "id": target_id}
 
 
-@router.delete("/")
-async def delete_targets_by_status(status: str = Query(...)):
+@router.delete("/by-status/{status}")
+async def delete_targets_by_status(status: str):
     """Delete all targets with a specific status."""
     try:
         count = await target_service.delete_targets_by_status(status)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"message": f"Deleted {count} targets", "count": count}
+
+
+@router.delete("/", deprecated=True)
+async def delete_targets_by_status_legacy(status: str = Query(...)):
+    """Deprecated: use DELETE /by-status/{status} instead."""
+    return await delete_targets_by_status(status)

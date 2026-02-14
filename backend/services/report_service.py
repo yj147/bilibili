@@ -426,12 +426,12 @@ async def get_report_logs(limit: int = 100):
     )
 
 
-async def get_target_logs(target_id: int):
+async def get_target_logs(target_id: int, limit: int = 100):
     return await execute_query(
         """SELECT l.*, a.name as account_name
            FROM report_logs l
            LEFT JOIN accounts a ON l.account_id = a.id
            WHERE l.target_id = ?
-           ORDER BY l.executed_at DESC""",
-        (target_id,),
+           ORDER BY l.executed_at DESC LIMIT ?""",
+        (target_id, limit),
     )
