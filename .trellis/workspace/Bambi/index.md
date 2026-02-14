@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 15
+- **Total Sessions**: 17
 - **Last Active**: 2026-02-14
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~973 | Active |
+| `journal-1.md` | ~1182 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,8 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits |
 |---|------|-------|---------|
+| 17 | 2026-02-14 | 配置模块深度审查与修复 | `e926a47`, `e085d79`, `1ec4624`, `95fa458`, `52b6753`, `7e563cd` |
+| 16 | 2026-02-14 | 修复 18 个 API 设计问题 | `9fa00fd` |
 | 15 | 2026-02-14 | Cookie自动刷新修复 + 自动回复深度修复 | `858b822` |
 | 14 | 2026-02-13 | React性能优化 + 并发安全修复 + Spec更新 | `7e73395` |
 | 13 | 2026-02-13 | 自动回复模块深度修复 (15个问题) + 可选认证修复 | `dce8482`, `bc8677a`, `dd505fd` |
