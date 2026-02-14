@@ -10,7 +10,8 @@ import {
   Github,
   Save,
   Info,
-  Loader2
+  Loader2,
+  MessageSquare
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import { useConfigs, useSystemInfo } from "@/lib/swr";
@@ -55,13 +56,17 @@ export default function ConfigPage() {
   const [saving, setSaving] = useState(false);
 
   const [formState, setFormState] = useState({
-    min_delay: "2",
-    max_delay: "10",
+    min_delay: "3",
+    max_delay: "12",
     ua_rotation: true,
     webhook_url: "",
     notify_level: "error",
     auto_clean_logs: true,
     log_retention_days: "30",
+    autoreply_poll_interval_seconds: "30",
+    autoreply_poll_min_interval_seconds: "10",
+    autoreply_account_batch_size: "0",
+    autoreply_session_batch_size: "5",
   });
 
   useEffect(() => {
@@ -74,6 +79,10 @@ export default function ConfigPage() {
         notify_level: String(configs.notify_level ?? prev.notify_level),
         auto_clean_logs: Boolean(configs.auto_clean_logs ?? prev.auto_clean_logs),
         log_retention_days: String(configs.log_retention_days ?? prev.log_retention_days),
+        autoreply_poll_interval_seconds: String(configs.autoreply_poll_interval_seconds ?? prev.autoreply_poll_interval_seconds),
+        autoreply_poll_min_interval_seconds: String(configs.autoreply_poll_min_interval_seconds ?? prev.autoreply_poll_min_interval_seconds),
+        autoreply_account_batch_size: String(configs.autoreply_account_batch_size ?? prev.autoreply_account_batch_size),
+        autoreply_session_batch_size: String(configs.autoreply_session_batch_size ?? prev.autoreply_session_batch_size),
       }));
     }
   }, [configs]);
@@ -82,13 +91,17 @@ export default function ConfigPage() {
     setSaving(true);
     try {
       await api.config.updateBatch({
-        min_delay: parseInt(formState.min_delay) || 2,
-        max_delay: parseInt(formState.max_delay) || 10,
+        min_delay: Number(formState.min_delay) || 3,
+        max_delay: Number(formState.max_delay) || 12,
         ua_rotation: formState.ua_rotation,
         webhook_url: formState.webhook_url,
         notify_level: formState.notify_level,
         auto_clean_logs: formState.auto_clean_logs,
         log_retention_days: parseInt(formState.log_retention_days) || 30,
+        autoreply_poll_interval_seconds: parseInt(formState.autoreply_poll_interval_seconds) || 30,
+        autoreply_poll_min_interval_seconds: parseInt(formState.autoreply_poll_min_interval_seconds) || 10,
+        autoreply_account_batch_size: parseInt(formState.autoreply_account_batch_size) || 0,
+        autoreply_session_batch_size: parseInt(formState.autoreply_session_batch_size) || 5,
       });
       mutateConfigs();
       toast.success("配置已保存");
@@ -188,6 +201,42 @@ export default function ConfigPage() {
           >
             <Input type="number" min={1} max={365} value={formState.log_retention_days}
               onChange={(e) => setFormState({...formState, log_retention_days: e.target.value})}
+              className="text-xs w-20 text-center" />
+          </ConfigItem>
+        </ConfigSection>
+
+        {/* Auto Reply Settings */}
+        <ConfigSection title="自动回复" icon={MessageSquare}>
+          <ConfigItem
+            label="轮询间隔"
+            description="检查新评论的间隔时间（秒）"
+          >
+            <Input type="number" min={1} max={300} value={formState.autoreply_poll_interval_seconds}
+              onChange={(e) => setFormState({...formState, autoreply_poll_interval_seconds: e.target.value})}
+              className="text-xs w-20 text-center" />
+          </ConfigItem>
+          <ConfigItem
+            label="最小轮询间隔"
+            description="轮询的最短间隔时间（秒）"
+          >
+            <Input type="number" min={1} max={60} value={formState.autoreply_poll_min_interval_seconds}
+              onChange={(e) => setFormState({...formState, autoreply_poll_min_interval_seconds: e.target.value})}
+              className="text-xs w-20 text-center" />
+          </ConfigItem>
+          <ConfigItem
+            label="账号批处理大小"
+            description="每批处理的账号数量（0=不限制）"
+          >
+            <Input type="number" min={0} max={100} value={formState.autoreply_account_batch_size}
+              onChange={(e) => setFormState({...formState, autoreply_account_batch_size: e.target.value})}
+              className="text-xs w-20 text-center" />
+          </ConfigItem>
+          <ConfigItem
+            label="会话批处理大小"
+            description="每批处理的会话数量"
+          >
+            <Input type="number" min={1} max={50} value={formState.autoreply_session_batch_size}
+              onChange={(e) => setFormState({...formState, autoreply_session_batch_size: e.target.value})}
               className="text-xs w-20 text-center" />
           </ConfigItem>
         </ConfigSection>

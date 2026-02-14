@@ -1,6 +1,30 @@
 """System Configuration Service"""
 import json
-from backend.database import execute_query, get_all_configs_cached, invalidate_cache
+from backend.database import execute_query, get_all_configs_cached, invalidate_cache, execute_in_transaction
+
+
+def _validate_config(key: str, value):
+    """Validate a config key-value pair. Raises ValueError if invalid."""
+    if key == "log_retention_days":
+        days = int(value)
+        if days < 1:
+            raise ValueError("log_retention_days must be >= 1")
+    elif key == "min_delay":
+        v = float(value)
+        if not (1 <= v <= 10):
+            raise ValueError("min_delay must be between 1 and 10")
+    elif key == "max_delay":
+        v = float(value)
+        if not (10 <= v <= 60):
+            raise ValueError("max_delay must be between 10 and 60")
+    elif key in ("autoreply_poll_interval_seconds", "autoreply_poll_min_interval_seconds"):
+        v = int(value)
+        if v < 1:
+            raise ValueError(f"{key} must be >= 1")
+    elif key in ("autoreply_account_batch_size", "autoreply_session_batch_size"):
+        v = int(value)
+        if v < 0:
+            raise ValueError(f"{key} must be >= 0")
 
 
 async def get_config(key: str):
@@ -19,41 +43,39 @@ async def get_config(key: str):
 
 async def set_config(key: str, value):
     """Set a config value (upsert)."""
-    # Validate known config keys
-    if key == "log_retention_days":
-        try:
-            days = int(value)
-            if days < 1:
-                raise ValueError("log_retention_days must be >= 1")
-        except (TypeError, ValueError) as e:
-            raise ValueError(str(e))
-    if key in ("min_delay", "max_delay"):
-        try:
-            v = float(value)
-            if v < 0:
-                raise ValueError(f"{key} must be >= 0")
-        except (TypeError, ValueError) as e:
-            raise ValueError(str(e))
-    if key in ("autoreply_poll_interval_seconds", "autoreply_poll_min_interval_seconds"):
-        try:
-            v = int(value)
-            if v < 1:
-                raise ValueError(f"{key} must be >= 1")
-        except (TypeError, ValueError) as e:
-            raise ValueError(str(e))
-    if key in ("autoreply_account_batch_size", "autoreply_session_batch_size"):
-        try:
-            v = int(value)
-            if v < 0:
-                raise ValueError(f"{key} must be >= 0")
-        except (TypeError, ValueError) as e:
-            raise ValueError(str(e))
-    serialized = json.dumps(value) if not isinstance(value, str) else value
+    try:
+        _validate_config(key, value)
+    except (TypeError, ValueError) as e:
+        raise ValueError(str(e))
+    serialized = json.dumps(value)
     await execute_query(
         "INSERT INTO system_config (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) "
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
         (key, serialized),
     )
+    await invalidate_cache("all_configs")
+
+
+async def set_configs_batch_atomic(configs: dict):
+    """Atomically update multiple configs in a transaction."""
+    # Validate all configs first
+    for key, value in configs.items():
+        try:
+            _validate_config(key, value)
+        except (TypeError, ValueError) as e:
+            raise ValueError(f"Validation failed for '{key}': {str(e)}")
+
+    # Write all in transaction
+    async def _write_all(conn):
+        for key, value in configs.items():
+            serialized = json.dumps(value)
+            await conn.execute(
+                "INSERT INTO system_config (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+                (key, serialized)
+            )
+
+    await execute_in_transaction(_write_all)
     await invalidate_cache("all_configs")
 
 

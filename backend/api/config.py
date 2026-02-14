@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Any
-from backend.services.config_service import get_config, set_config, get_all_configs
+from backend.services.config_service import get_config, set_config, get_all_configs, set_configs_batch_atomic
 
 router = APIRouter()
 
@@ -41,11 +41,8 @@ async def update_config_value(key: str, body: ConfigValue):
 
 @router.post("/batch", response_model=ConfigBatchResponse)
 async def update_configs_batch(body: ConfigBatchUpdate):
-    updated_keys = []
-    for key, value in body.configs.items():
-        try:
-            await set_config(key, value)
-            updated_keys.append(key)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=f"Failed on key '{key}': {str(e)}")
-    return {"message": f"Updated {len(updated_keys)} configs", "updated_keys": updated_keys}
+    try:
+        await set_configs_batch_atomic(body.configs)
+        return {"message": f"Updated {len(body.configs)} configs", "updated_keys": list(body.configs.keys())}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

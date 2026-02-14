@@ -5,13 +5,35 @@ import random
 import time
 
 from backend.database import execute_query, execute_insert
-from backend.config import MIN_DELAY, MAX_DELAY, ACCOUNT_COOLDOWN
 from backend.core.bilibili_client import _human_delay
 from backend.logger import logger
+from backend.services.config_service import get_config
 
 # Track last report time per account for cooldown
 _account_last_report: dict[int, float] = {}
 _cooldown_lock = asyncio.Lock()
+
+# Config cache (60s TTL)
+_config_cache = {}
+_cache_ttl = 60
+
+async def _get_delay_config():
+    """Get delay config with caching."""
+    now = time.time()
+    if 'delays' in _config_cache and now - _config_cache['delays']['time'] < _cache_ttl:
+        return _config_cache['delays']['data']
+
+    min_delay = await get_config('min_delay') or 3.0
+    max_delay = await get_config('max_delay') or 12.0
+    account_cooldown = await get_config('account_cooldown') or 90.0
+
+    data = {
+        'min_delay': float(min_delay),
+        'max_delay': float(max_delay),
+        'account_cooldown': float(account_cooldown)
+    }
+    _config_cache['delays'] = {'data': data, 'time': now}
+    return data
 
 def _cleanup_stale_cooldowns():
     """Remove cooldown entries older than 1 hour to prevent memory leak."""
@@ -175,10 +197,11 @@ async def execute_report_for_target(target_id: int, account_ids: list[int] | Non
             _cleanup_stale_cooldowns()
 
             # Account cooldown: wait if reported too recently
+            config = await _get_delay_config()
             last_ts = _account_last_report.get(account["id"], 0)
             elapsed = time.monotonic() - last_ts
-            if elapsed < ACCOUNT_COOLDOWN:
-                wait = ACCOUNT_COOLDOWN - elapsed + random.uniform(0, 5)
+            if elapsed < config['account_cooldown']:
+                wait = config['account_cooldown'] - elapsed + random.uniform(0, 5)
                 logger.info("[%s] Account cooldown, waiting %.1fs...", account["name"], wait)
                 await asyncio.sleep(wait)
 
@@ -200,7 +223,8 @@ async def execute_report_for_target(target_id: int, account_ids: list[int] | Non
         if result.get("success"):
             break
 
-        await asyncio.sleep(_human_delay(MIN_DELAY, MAX_DELAY))
+        config = await _get_delay_config()
+        await asyncio.sleep(_human_delay(config['min_delay'], config['max_delay']))
 
     any_success = any(r["success"] for r in results)
     final_status = "completed" if any_success else "failed"
@@ -249,10 +273,11 @@ async def execute_batch_reports(target_ids: list[int] | None, account_ids: list[
             for account in shuffled_accounts:
                 max_rate_retries = 2
                 for attempt in range(1 + max_rate_retries):
+                    config = await _get_delay_config()
                     last_ts = _account_last_report.get(account["id"], 0)
                     elapsed = time.monotonic() - last_ts
-                    if elapsed < ACCOUNT_COOLDOWN:
-                        wait = ACCOUNT_COOLDOWN - elapsed + random.uniform(0, 5)
+                    if elapsed < config['account_cooldown']:
+                        wait = config['account_cooldown'] - elapsed + random.uniform(0, 5)
                         logger.info("[%s] Account cooldown, waiting %.1fs...", account["name"], wait)
                         await asyncio.sleep(wait)
 
@@ -273,7 +298,8 @@ async def execute_batch_reports(target_ids: list[int] | None, account_ids: list[
                 if result.get("success"):
                     break
 
-                await asyncio.sleep(_human_delay(MIN_DELAY, MAX_DELAY))
+                config = await _get_delay_config()
+                await asyncio.sleep(_human_delay(config['min_delay'], config['max_delay']))
 
             any_success = any(r["success"] for r in results)
             await target_service.update_target_status(
@@ -349,7 +375,8 @@ async def scan_and_report_comments(
             await broadcast_log("scan", f"Page {page}: fetched {len(replies)} comments (total {len(all_replies)})")
 
             # Anti-detection delay between pages
-            await asyncio.sleep(_human_delay(MIN_DELAY, MAX_DELAY))
+            config = await _get_delay_config()
+            await asyncio.sleep(_human_delay(config['min_delay'], config['max_delay']))
 
         comments_found = len(all_replies)
         await broadcast_log("scan", f"Scan complete: {comments_found} comments found for {bvid}")
@@ -397,7 +424,8 @@ async def scan_and_report_comments(
                 reports_executed += 1
                 if result.get("success"):
                     reports_successful += 1
-                await asyncio.sleep(_human_delay(MIN_DELAY, MAX_DELAY))
+                config = await _get_delay_config()
+                await asyncio.sleep(_human_delay(config['min_delay'], config['max_delay']))
 
             await broadcast_log(
                 "scan",

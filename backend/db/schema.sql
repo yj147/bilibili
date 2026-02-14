@@ -65,7 +65,6 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
     interval_seconds INTEGER,
     is_active BOOLEAN DEFAULT 1,
     last_run_at DATETIME,
-    next_run_at DATETIME,
     config_json TEXT
 );
 
@@ -80,6 +79,7 @@ CREATE TABLE IF NOT EXISTS system_config (
 -- Default config values
 INSERT OR IGNORE INTO system_config (key, value) VALUES ('min_delay', '3.0');
 INSERT OR IGNORE INTO system_config (key, value) VALUES ('max_delay', '12.0');
+INSERT OR IGNORE INTO system_config (key, value) VALUES ('account_cooldown', '90.0');
 INSERT OR IGNORE INTO system_config (key, value) VALUES ('ua_rotation', 'true');
 INSERT OR IGNORE INTO system_config (key, value) VALUES ('auto_clean_logs', 'true');
 INSERT OR IGNORE INTO system_config (key, value) VALUES ('log_retention_days', '30');
