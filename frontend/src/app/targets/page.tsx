@@ -70,7 +70,8 @@ export default function TargetsPage() {
   if (typeFilter) queryParams.type = typeFilter;
 
   const { data: targetData, mutate, isLoading } = useTargets(queryParams);
-  const { data: accounts = [] } = useAccounts();
+  const { data: accountData } = useAccounts();
+  const accounts = accountData?.items ?? [];
   const stats = useTargetStats();
 
   const targets = useMemo(() => {

@@ -24,6 +24,12 @@ async def get_account(account_id: int):
     return rows[0] if rows else None
 
 
+async def get_account_credentials(account_id: int):
+    """Get a single account with credential fields."""
+    rows = await execute_query("SELECT * FROM accounts WHERE id = ?", (account_id,))
+    return rows[0] if rows else None
+
+
 async def get_account_public(account_id: int):
     """Get account by ID, excluding credentials."""
     rows = await execute_query(f"SELECT {_PUBLIC_COLUMNS} FROM accounts WHERE id = ?", (account_id,))

@@ -79,3 +79,13 @@ class AccountStatus(BaseModel):
     status: str
     is_valid: bool
     uid: Optional[int] = None
+
+
+class AccountCredentials(BaseModel):
+    """Account credentials response (sensitive data)."""
+    id: int
+    name: str
+    sessdata: str
+    bili_jct: str
+    buvid3: str
+    buvid4: str

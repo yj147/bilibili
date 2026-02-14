@@ -195,7 +195,6 @@ export interface ScheduledTask {
   id: number;
   is_active: boolean;
   last_run_at: string | null;
-  next_run_at: string | null;
 }
 
 export interface ScheduledTaskBase {

@@ -43,7 +43,8 @@ function buildLast7DayCounts(logs: { executed_at: string; success: boolean }[]):
 }
 
 export default function Dashboard() {
-  const { data: accounts = [], mutate: mutateAccounts } = useAccounts();
+  const { data: accountData, mutate: mutateAccounts } = useAccounts();
+  const accounts = accountData?.items ?? [];
   const { data: targetData } = useTargets();
   const { data: apiLogs = [] } = useReportLogs(500);
   const { logs: wsLogs, connected: wsConnected } = useLogStream(50);

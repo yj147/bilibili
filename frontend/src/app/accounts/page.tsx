@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useReducer } from "react";
+import React, { useState, useEffect, useRef, useReducer, useMemo } from "react";
 import {
   Users,
   Plus,
@@ -83,7 +83,8 @@ function loadingReducer(state: LoadingState, action: LoadingAction): LoadingStat
 }
 
 export default function AccountsPage() {
-  const { data: accounts = [], error, mutate, isValidating } = useAccounts();
+  const { data: accountData, error, mutate, isValidating } = useAccounts();
+  const accounts = useMemo(() => accountData?.items ?? [], [accountData?.items]);
   const loading = isValidating;
   const { confirm, ConfirmDialog } = useConfirm();
   const [showAddModal, setShowAddModal] = useState(false);
@@ -161,8 +162,8 @@ export default function AccountsPage() {
   const handleEdit = async (acc: AccountPublic) => {
     dispatch({ type: "ADD_EDITING", id: acc.id });
     try {
-      const detail = await api.accounts.get(acc.id);
-      if (typeof detail.sessdata !== "string" || typeof detail.bili_jct !== "string") {
+      const detail = await api.accounts.getWithCredentials(acc.id);
+      if (!detail || typeof detail.sessdata !== "string" || typeof detail.bili_jct !== "string") {
         toast.error("账号详情缺少凭据字段，无法编辑");
         return;
       }
@@ -219,9 +220,9 @@ export default function AccountsPage() {
   const handleCheckAll = async () => {
     setIsCheckingAll(true);
     try {
-      const result = await api.accounts.checkAll();
-      mutate();
-      toast.success(`批量检测完成（${result.checked} 个账号）`);
+      await api.accounts.checkAll();
+      toast.success("批量检测已提交，后台执行中");
+      setTimeout(() => mutate(), 5000);
     } catch (err) {
       console.error("Batch check failed", err);
       toast.error("批量检测失败");

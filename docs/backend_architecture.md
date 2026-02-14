@@ -169,7 +169,6 @@ CREATE TABLE scheduled_tasks (
     interval_seconds INTEGER,       -- 简单间隔模式
     is_active BOOLEAN DEFAULT 1,
     last_run_at DATETIME,
-    next_run_at DATETIME,
     config_json TEXT                -- 任务配置
 );
 ```
