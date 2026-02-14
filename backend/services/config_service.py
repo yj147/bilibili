@@ -1,5 +1,6 @@
 """System Configuration Service"""
 import json
+import math
 from backend.database import execute_query, get_all_configs_cached, invalidate_cache, execute_in_transaction
 from backend.logger import logger
 
@@ -11,9 +12,11 @@ def _validate_config(key: str, value):
         if days < 1:
             raise ValueError("log_retention_days must be >= 1")
     elif key == "account_cooldown":
+        if isinstance(value, bool):
+            raise ValueError("account_cooldown cannot be a boolean")
         v = float(value)
-        if v < 1:
-            raise ValueError("account_cooldown must be >= 1")
+        if not math.isfinite(v) or v < 1:
+            raise ValueError("account_cooldown must be a finite number >= 1")
     elif key == "min_delay":
         v = float(value)
         if not (1 <= v <= 10):
