@@ -14,7 +14,10 @@ def _validate_config(key: str, value):
     elif key == "account_cooldown":
         if isinstance(value, bool):
             raise ValueError("account_cooldown cannot be a boolean")
-        v = float(value)
+        try:
+            v = float(value)
+        except (ValueError, OverflowError) as e:
+            raise ValueError(f"account_cooldown must be a valid number: {e}")
         if not math.isfinite(v) or v < 1:
             raise ValueError("account_cooldown must be a finite number >= 1")
     elif key == "min_delay":
@@ -63,7 +66,7 @@ async def set_config(key: str, value):
     """Set a config value (upsert)."""
     try:
         _validate_config(key, value)
-    except (TypeError, ValueError) as e:
+    except (TypeError, ValueError, OverflowError) as e:
         raise ValueError(str(e))
     serialized = json.dumps(value)
     await execute_query(

@@ -34,9 +34,15 @@ async def _get_delay_config():
     max_delay = configs.get('max_delay') or 12.0
     account_cooldown = configs.get('account_cooldown') or 90.0
 
+    # Sanitize values to prevent nan/inf from historical data
+    import math
+    min_delay = float(min_delay) if math.isfinite(float(min_delay)) else 3.0
+    max_delay = float(max_delay) if math.isfinite(float(max_delay)) else 12.0
+    account_cooldown = float(account_cooldown) if math.isfinite(float(account_cooldown)) else 90.0
+
     data = {
-        'min_delay': float(min_delay),
-        'max_delay': float(max_delay),
+        'min_delay': min_delay,
+        'max_delay': max_delay,
         'account_cooldown': float(account_cooldown)
     }
     _config_cache['delays'] = {'data': data, 'time': now}
