@@ -24,6 +24,7 @@ Bili-Sentinel backend is a **FastAPI** application with **aiosqlite** (SQLite), 
 | [Error Handling](./error-handling.md) | Middleware, (result, error) tuples, retry logic | Done |
 | [Quality Guidelines](./quality-guidelines.md) | Code standards, required/forbidden patterns, testing | Done |
 | [Logging Guidelines](./logging-guidelines.md) | Logger usage, levels, WebSocket broadcasting | Done |
+| [Concurrency Patterns](./concurrency-patterns.md) | asyncio.Lock, atomic claims, TOCTOU prevention, background tasks | Done |
 
 ---
 
