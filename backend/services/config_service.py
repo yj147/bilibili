@@ -83,7 +83,7 @@ async def set_configs_batch_atomic(configs: dict):
     for key, value in configs.items():
         try:
             _validate_config(key, value)
-        except (TypeError, ValueError) as e:
+        except (TypeError, ValueError, OverflowError) as e:
             raise ValueError(f"Validation failed for '{key}': {str(e)}")
 
     # Write all in transaction
