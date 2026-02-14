@@ -3,6 +3,7 @@
 import asyncio
 from collections.abc import Awaitable, Callable
 import json
+from typing import Optional, TypedDict
 
 from backend.database import execute_insert, execute_query
 from backend.logger import logger
@@ -23,22 +24,30 @@ AUTOREPLY_SEND_DELAY = 3.0  # seconds between replies to avoid B站 rate limitin
 ReplySentCallback = Callable[[dict, int | str, str, dict], Awaitable[None]]
 
 
-def match_reply_rule(msg_content: str, configs: list[dict]) -> str:
+class AutoReplyConfig(TypedDict):
+    keyword: Optional[str]
+    response: str
+    priority: int
+    is_active: int
+
+
+def match_reply_rule(msg_content: str, configs: list[AutoReplyConfig]) -> str:
     """Match first keyword rule in configured order; fallback to default reply."""
     default_reply = FALLBACK_AUTOREPLY_TEXT
-    has_default_reply = False
+    first_default = None
 
+    # Single pass: match keywords and capture first default
     for config in configs:
         keyword = config["keyword"]
         if keyword is None:
-            if not has_default_reply:
-                default_reply = config["response"]
-                has_default_reply = True
+            if first_default is None:
+                first_default = config["response"]
             continue
         if keyword and keyword in msg_content:
             return config["response"]
 
-    return default_reply
+    # Use captured default or fallback
+    return first_default if first_default is not None else default_reply
 
 
 def _apply_batch_limit(items: list, limit: int) -> list:

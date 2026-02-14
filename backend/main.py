@@ -76,6 +76,25 @@ async def _background_wbi_refresh():
             logger.error("Background WBI refresh error: %s", e)
 
 
+async def run_migrations() -> None:
+    from pathlib import Path
+
+    from backend.database import execute_query
+
+    migration_dir = Path("backend/db/migrations")
+    if not migration_dir.exists():
+        return
+
+    for sql_file in sorted(migration_dir.glob("*.sql")):
+        if sql_file.name.endswith("_down.sql"):
+            continue
+        logger.info("Running migration: %s", sql_file.name)
+        sql = sql_file.read_text(encoding="utf-8")
+        for statement in (part.strip() for part in sql.split(";")):
+            if statement:
+                await execute_query(statement)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan: startup and shutdown."""
@@ -85,6 +104,7 @@ async def lifespan(app: FastAPI):
     if (_os.cpu_count() or 1) > 1:
         logger.warning("Bili-Sentinel 必须以单 worker 模式运行 (--workers 1)")
     await init_db()
+    await run_migrations()
     logger.info("Database initialized")
     # Recover targets stuck in "processing" from previous crashes
     from backend.database import execute_query as _eq
