@@ -1,6 +1,7 @@
 """System Configuration Service"""
 import json
 from backend.database import execute_query, get_all_configs_cached, invalidate_cache, execute_in_transaction
+from backend.logger import logger
 
 
 def _validate_config(key: str, value):
@@ -9,6 +10,10 @@ def _validate_config(key: str, value):
         days = int(value)
         if days < 1:
             raise ValueError("log_retention_days must be >= 1")
+    elif key == "account_cooldown":
+        v = float(value)
+        if v < 1:
+            raise ValueError("account_cooldown must be >= 1")
     elif key == "min_delay":
         v = float(value)
         if not (1 <= v <= 10):
@@ -25,6 +30,16 @@ def _validate_config(key: str, value):
         v = int(value)
         if v < 0:
             raise ValueError(f"{key} must be >= 0")
+
+
+async def _invalidate_config_related_caches():
+    """Invalidate config caches across services on a best-effort basis."""
+    try:
+        await invalidate_cache("all_configs")
+        from backend.services.report_service import invalidate_delay_config_cache
+        invalidate_delay_config_cache()
+    except Exception:
+        logger.exception("Failed to invalidate config-related caches")
 
 
 async def get_config(key: str):
@@ -53,7 +68,7 @@ async def set_config(key: str, value):
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
         (key, serialized),
     )
-    await invalidate_cache("all_configs")
+    await _invalidate_config_related_caches()
 
 
 async def set_configs_batch_atomic(configs: dict):
@@ -76,7 +91,7 @@ async def set_configs_batch_atomic(configs: dict):
             )
 
     await execute_in_transaction(_write_all)
-    await invalidate_cache("all_configs")
+    await _invalidate_config_related_caches()
 
 
 async def get_all_configs():

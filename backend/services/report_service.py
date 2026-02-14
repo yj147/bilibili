@@ -7,15 +7,21 @@ import time
 from backend.database import execute_query, execute_insert
 from backend.core.bilibili_client import _human_delay
 from backend.logger import logger
-from backend.services.config_service import get_config
+from backend.services.config_service import get_all_configs
 
 # Track last report time per account for cooldown
 _account_last_report: dict[int, float] = {}
 _cooldown_lock = asyncio.Lock()
 
-# Config cache (60s TTL)
+# Two-layer config cache strategy:
+# local in-process cache (5s) sits in front of DB cache (300s in get_all_configs_cached()).
 _config_cache = {}
-_cache_ttl = 60
+_cache_ttl = 5
+
+
+def invalidate_delay_config_cache():
+    """Invalidate local delay config cache."""
+    _config_cache.pop("delays", None)
 
 async def _get_delay_config():
     """Get delay config with caching."""
@@ -23,9 +29,10 @@ async def _get_delay_config():
     if 'delays' in _config_cache and now - _config_cache['delays']['time'] < _cache_ttl:
         return _config_cache['delays']['data']
 
-    min_delay = await get_config('min_delay') or 3.0
-    max_delay = await get_config('max_delay') or 12.0
-    account_cooldown = await get_config('account_cooldown') or 90.0
+    configs = await get_all_configs()
+    min_delay = configs.get('min_delay') or 3.0
+    max_delay = configs.get('max_delay') or 12.0
+    account_cooldown = configs.get('account_cooldown') or 90.0
 
     data = {
         'min_delay': float(min_delay),
