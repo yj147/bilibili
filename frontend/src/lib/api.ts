@@ -58,13 +58,14 @@ async function request<T = unknown>(path: string, options: RequestInit = {}): Pr
 export const api = {
   // --- Accounts ---
   accounts: {
-    list: () => request<AccountPublic[]>("/accounts/"),
-    get: (id: number) => request<Account>(`/accounts/${id}`),
+    list: () => request<{ items: AccountPublic[]; total: number; page: number; page_size: number }>("/accounts/"),
+    get: (id: number) => request<AccountPublic>(`/accounts/${id}`),
+    getWithCredentials: (id: number) => request<Account>(`/accounts/${id}/credentials`, { method: "POST" }),
     create: (data: AccountCreate) => request<AccountPublic>("/accounts/", { method: "POST", body: JSON.stringify(data) }),
     update: (id: number, data: AccountUpdate) => request<AccountPublic>(`/accounts/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     delete: (id: number) => request(`/accounts/${id}`, { method: "DELETE" }),
     check: (id: number) => request(`/accounts/${id}/check`, { method: "POST" }),
-    checkAll: () => request<{ checked: number; results: unknown[] }>("/accounts/check-all", { method: "POST" }),
+    checkAll: () => request<{ status: string; message: string }>("/accounts/check-all", { method: "POST" }),
   },
 
   // --- Targets ---
@@ -81,7 +82,7 @@ export const api = {
     update: (id: number, data: { reason_id?: number; reason_content_id?: number; reason_text?: string; status?: string }) =>
       request<Target>(`/targets/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     delete: (id: number) => request(`/targets/${id}`, { method: "DELETE" }),
-    deleteByStatus: (status: string) => request(`/targets/?status=${status}`, { method: "DELETE" }),
+    deleteByStatus: (status: string) => request(`/targets/by-status/${status}`, { method: "DELETE" }),
   },
 
   // --- Reports ---
@@ -124,7 +125,7 @@ export const api = {
     getAll: () => request<Record<string, unknown>>('/config/'),
     get: (key: string) => request<{ key: string; value: unknown }>(`/config/${key}`),
     update: (key: string, value: unknown) => request(`/config/${key}`, { method: 'PUT', body: JSON.stringify({ value }) }),
-    updateBatch: (configs: Record<string, unknown>) => request('/config/batch', { method: 'POST', body: JSON.stringify(configs) }),
+    updateBatch: (configs: Record<string, unknown>) => request('/config/batch', { method: 'POST', body: JSON.stringify({ configs }) }),
   },
 
   // --- Auth ---

@@ -1,8 +1,8 @@
 """Account Management API Routes"""
 import asyncio
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 from typing import List
-from backend.models.account import Account, AccountCreate, AccountUpdate, AccountStatus, AccountPublic, AccountImport
+from backend.models.account import Account, AccountCreate, AccountUpdate, AccountStatus, AccountPublic, AccountImport, AccountCredentials
 from backend.services import account_service
 from backend.logger import logger
 
@@ -39,6 +39,7 @@ async def create_account(account: AccountCreate):
 
 
 _check_all_running = False
+_check_all_lock = asyncio.Lock()
 
 async def _check_all_in_background():
     global _check_all_running
@@ -59,12 +60,34 @@ async def _check_all_in_background():
 
 @router.post("/check-all", status_code=202)
 async def check_all_accounts():
-    global _check_all_running
-    if _check_all_running:
-        raise HTTPException(status_code=409, detail="Health check already in progress")
-    _check_all_running = True
-    asyncio.create_task(_check_all_in_background())
-    return {"status": "accepted", "message": "Account health check queued"}
+    async with _check_all_lock:
+        global _check_all_running
+        if _check_all_running:
+            raise HTTPException(status_code=409, detail="Health check already in progress")
+        try:
+            _check_all_running = True
+            asyncio.create_task(_check_all_in_background())
+            return {"status": "accepted", "message": "Account health check queued"}
+        except Exception as e:
+            _check_all_running = False
+            logger.error("Failed to create check-all background task: %s", e)
+            raise HTTPException(status_code=500, detail="Failed to start health check")
+
+@router.post("/{account_id}/credentials", response_model=AccountCredentials)
+async def get_account_credentials(account_id: int, response: Response):
+    logger.warning("AUDIT: Credential read requested for account_id=%d", account_id)
+    result = await account_service.get_account_credentials(account_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Account not found")
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "id": result["id"],
+        "name": result["name"],
+        "sessdata": result["sessdata"],
+        "bili_jct": result["bili_jct"],
+        "buvid3": result.get("buvid3", ""),
+        "buvid4": result.get("buvid4", ""),
+    }
 
 @router.get("/{account_id}", response_model=AccountPublic)
 async def get_account(account_id: int):
