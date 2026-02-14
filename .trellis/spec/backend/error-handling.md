@@ -252,3 +252,136 @@ async def verify_api_key(request: Request):
 ```
 
 **Key principle**: When a security feature is optional, the absence of configuration should **disable** the feature, not **block** the application.
+
+---
+
+## Gotcha: Python float() OverflowError Edge Case
+
+Python's `float()` conversion can raise `OverflowError` for extremely large numeric strings (e.g., `float('1e309')`), not just `ValueError`.
+
+**Problem**: Validation code that only catches `ValueError` will crash on overflow inputs:
+
+```python
+# Bad — misses OverflowError
+try:
+    v = float(value)
+except ValueError as e:
+    raise ValueError(f"Invalid number: {e}")
+```
+
+**Why it's bad**: User input like `"1e309"` or `"9" * 400` causes unhandled `OverflowError`, resulting in 500 errors instead of proper validation feedback.
+
+**Correct pattern**:
+
+```python
+# Good — catches both ValueError and OverflowError
+try:
+    v = float(value)
+except (ValueError, OverflowError) as e:
+    raise ValueError(f"Invalid number: {e}")
+
+# Even better — add finite check
+import math
+try:
+    v = float(value)
+except (ValueError, OverflowError) as e:
+    raise ValueError(f"Invalid number: {e}")
+if not math.isfinite(v):
+    raise ValueError("Value must be finite (not nan/inf)")
+```
+
+**Consistency requirement**: When multiple functions call the same validation helper, they must catch the **same exception types**. Inconsistent exception handling creates gaps where some code paths handle errors gracefully while others crash.
+
+**Example from config_service.py**:
+- `_validate_config()` raises `(ValueError, OverflowError)` at line 19
+- `set_config()` must catch `(TypeError, ValueError, OverflowError)` at line 69
+- `set_configs_batch_atomic()` must catch `(TypeError, ValueError, OverflowError)` at line 86
+
+If `set_configs_batch_atomic()` only caught `(TypeError, ValueError)`, batch updates would crash on overflow while single updates handled it gracefully.
+
+---
+
+## Pattern: Sanitizing Historical Dirty Data on Read Path
+
+When validation rules are added or tightened, existing database rows may contain values that violate the new constraints (e.g., `nan`, `inf`, invalid types).
+
+**Problem**: Strict validation on write path doesn't protect against dirty data already in the database. Read operations can propagate invalid values into application logic, causing crashes or incorrect behavior.
+
+**Solution**: Add sanitization on the **read path** with fallback to safe defaults:
+
+```python
+# In report_service.py _get_delay_config()
+import math
+
+configs = await get_all_configs()
+min_delay = configs.get('min_delay') or 3.0
+max_delay = configs.get('max_delay') or 12.0
+account_cooldown = configs.get('account_cooldown') or 90.0
+
+# Sanitize values to prevent nan/inf from historical data
+min_delay = float(min_delay) if math.isfinite(float(min_delay)) else 3.0
+max_delay = float(max_delay) if math.isfinite(float(max_delay)) else 12.0
+account_cooldown = float(account_cooldown) if math.isfinite(float(account_cooldown)) else 90.0
+```
+
+**When to use this pattern**:
+- After adding new validation rules to existing fields
+- When dealing with user-editable configuration
+- When numeric fields could have been set before `nan`/`inf` checks existed
+- In cached data paths where stale values might persist
+
+**Why it works**: Provides defense-in-depth — even if dirty data exists in the database, the application remains stable by falling back to safe defaults.
+
+---
+
+## Pattern: Two-Layer Cache Strategy
+
+For frequently-accessed configuration data, use a two-layer cache to balance freshness with performance:
+
+**Layer 1**: Short-lived in-process cache (5-10 seconds)
+- Eliminates repeated DB queries within a single request or tight loop
+- Invalidated manually when config changes
+
+**Layer 2**: Database-level cache (5 minutes)
+- Shared across all processes/workers
+- Reduces DB load for read-heavy workloads
+
+**Example from report_service.py**:
+
+```python
+# Local in-process cache (5s TTL)
+_config_cache = {}
+_cache_ttl = 5
+
+async def _get_delay_config():
+    now = time.time()
+    if 'delays' in _config_cache and now - _config_cache['delays']['time'] < _cache_ttl:
+        return _config_cache['delays']['data']
+
+    # Falls through to DB cache (300s TTL in get_all_configs_cached())
+    configs = await get_all_configs()
+    # ... process configs ...
+
+    _config_cache['delays'] = {'data': data, 'time': now}
+    return data
+```
+
+**Cache invalidation**: Use **best-effort** invalidation to avoid circular dependencies:
+
+```python
+async def _invalidate_config_related_caches():
+    """Invalidate config caches on a best-effort basis."""
+    try:
+        await invalidate_cache("all_configs")  # DB cache
+        from backend.services.report_service import invalidate_delay_config_cache
+        invalidate_delay_config_cache()  # Local cache
+    except Exception:
+        logger.exception("Failed to invalidate config-related caches")
+```
+
+**Why best-effort**: Config updates are rare, and stale cache for a few seconds is acceptable. Swallowing exceptions prevents circular import issues and keeps the update path simple.
+
+**When to use**:
+- Configuration data read frequently but updated rarely
+- Performance-critical paths (e.g., per-request delay calculations)
+- When eventual consistency is acceptable (5-10 second staleness OK)
