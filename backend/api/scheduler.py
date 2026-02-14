@@ -35,12 +35,15 @@ async def get_scheduled_task(task_id: int):
 
 @router.put("/tasks/{task_id}", response_model=ScheduledTask)
 async def update_scheduled_task(task_id: int, task: ScheduledTaskUpdate):
-    result = await scheduler_service.update_task(task_id, task.model_dump(exclude_unset=True))
-    if result == "no_valid_fields":
-        raise HTTPException(status_code=400, detail="No valid fields to update")
-    if result is None:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return result
+    try:
+        result = await scheduler_service.update_task(task_id, task.model_dump(exclude_unset=True))
+        if result == "no_valid_fields":
+            raise HTTPException(status_code=400, detail="No valid fields to update")
+        if result is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
 
 @router.delete("/tasks/{task_id}")
