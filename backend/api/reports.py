@@ -9,6 +9,7 @@ from backend.models.report import (
     CommentScanRequest, CommentScanResult,
 )
 from backend.services import report_service, target_service
+from backend.services.report_service import claim_target_for_processing
 from backend.database import execute_insert
 from backend.logger import logger
 
@@ -18,7 +19,13 @@ router = APIRouter()
 async def _run_report_in_background(target_id: int, account_ids: list[int] | None):
     """Fire-and-forget wrapper for report execution."""
     try:
-        await report_service.execute_report_for_target(target_id, account_ids)
+        results, error = await report_service.execute_report_for_target(target_id, account_ids)
+        if error:
+            await target_service.update_target_status(target_id, "failed")
+            await execute_insert(
+                "INSERT INTO report_logs (target_id, action, success, error_message) VALUES (?, ?, ?, ?)",
+                (target_id, "no_accounts", False, error)
+            )
     except Exception as e:
         logger.error("Background report execution failed for target %s: %s", target_id, e)
         await target_service.update_target_status(target_id, "failed")
@@ -31,7 +38,13 @@ async def _run_report_in_background(target_id: int, account_ids: list[int] | Non
 async def _run_batch_in_background(target_ids: list[int] | None, account_ids: list[int] | None):
     """Fire-and-forget wrapper for batch report execution."""
     try:
-        await report_service.execute_batch_reports(target_ids, account_ids)
+        result, error = await report_service.execute_batch_reports(target_ids, account_ids)
+        if result:
+            success_count = result.get("successful", 0)
+            total_count = result.get("total_targets", 0)
+            logger.info("Batch execution completed: %d/%d targets successful", success_count, total_count)
+        elif error:
+            logger.error("Batch execution failed: %s", error)
     except Exception as e:
         logger.error("Background batch execution failed: %s", e)
 
@@ -43,11 +56,13 @@ async def execute_report(request: ReportExecuteRequest):
     target = await target_service.get_target(request.target_id)
     if not target:
         raise HTTPException(status_code=404, detail="Target not found")
-    if target["status"] == "processing":
-        raise HTTPException(status_code=409, detail="Target is already being processed")
 
-    # Update status and create task atomically with error handling
-    await target_service.update_target_status(request.target_id, "processing")
+    # Atomic CAS to claim target for processing
+    claimed = await claim_target_for_processing(request.target_id)
+    if not claimed:
+        raise HTTPException(status_code=409, detail="Target is already being processed or completed")
+
+    # Create task with error handling
     task = None
     try:
         task = asyncio.create_task(_run_report_in_background(request.target_id, request.account_ids))

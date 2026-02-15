@@ -19,7 +19,7 @@ class ReportBatchExecuteRequest(BaseModel):
 
 class ReportLog(BaseModel):
     id: int
-    target_id: int
+    target_id: Optional[int]
     account_id: Optional[int]
     account_name: Optional[str] = None
     action: str

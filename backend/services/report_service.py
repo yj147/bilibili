@@ -8,6 +8,7 @@ from backend.database import execute_query, execute_insert, execute_in_transacti
 from backend.core.bilibili_client import _human_delay
 from backend.logger import logger
 from backend.services.config_service import get_all_configs
+from backend.services import target_service
 
 # Track last report time per account for cooldown
 _account_last_report: dict[int, float] = {}
@@ -63,13 +64,13 @@ async def _cleanup_stale_cooldowns():
         logger.debug("Cleaned up %d stale cooldown entries", len(stale_keys))
 
 
-async def _claim_target_for_processing(target_id: int) -> bool:
+async def claim_target_for_processing(target_id: int) -> bool:
     """Atomically claim a pending target for processing."""
 
     async def _operation(conn):
         cursor = await conn.execute(
             "UPDATE targets SET status = 'processing', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') "
-            "WHERE id = ? AND status != 'processing'",
+            "WHERE id = ? AND status = 'pending'",
             (target_id,),
         )
         return cursor.rowcount > 0
@@ -236,10 +237,11 @@ async def execute_report_for_target(target_id: int, account_ids: list[int] | Non
                 elapsed = time.monotonic() - last_ts
                 if elapsed < config['account_cooldown']:
                     wait = config['account_cooldown'] - elapsed + random.uniform(0, 5)
-                    _account_last_report[account["id"]] = time.monotonic() + wait
                 else:
                     wait = 0
-                    _account_last_report[account["id"]] = time.monotonic()
+                # Reserve account immediately with future timestamp to prevent race condition
+                _account_last_report[account["id"]] = time.monotonic() + wait
+
             if wait > 0:
                 logger.info("[%s] Account cooldown, waiting %.1fs...", account["name"], wait)
                 await asyncio.sleep(wait)
@@ -251,9 +253,10 @@ async def execute_report_for_target(target_id: int, account_ids: list[int] | Non
             if resp.get("code") == 12019 and attempt < max_rate_retries:
                 wait = 90 + random.uniform(0, 15)
                 logger.info("[%s] Rate limited (12019), waiting %.0fs before retry %d...", account["name"], wait, attempt + 1)
-                async with _cooldown_lock:
-                    _account_last_report[account["id"]] = time.monotonic() + wait
                 await asyncio.sleep(wait)
+                # Update timestamp to current time after sleep to avoid double cooldown
+                async with _cooldown_lock:
+                    _account_last_report[account["id"]] = time.monotonic()
                 continue
             break
 
@@ -267,8 +270,10 @@ async def execute_report_for_target(target_id: int, account_ids: list[int] | Non
         await asyncio.sleep(_human_delay(config['min_delay'], config['max_delay']))
 
     any_success = any(r["success"] for r in results)
-    final_status = "completed" if any_success else "failed"
-    await target_service.increment_retry_and_set_status(target_id, final_status)
+    if any_success:
+        await target_service.update_target_status(target_id, "completed")
+    else:
+        await target_service.increment_retry_and_set_status(target_id, "failed")
 
     return results, None
 
@@ -305,7 +310,7 @@ async def execute_batch_reports(target_ids: list[int] | None, account_ids: list[
     async def process_target(target: dict) -> list[dict]:
         """Process a single target with all accounts until success."""
         async with semaphore:
-            claimed = await _claim_target_for_processing(target["id"])
+            claimed = await claim_target_for_processing(target["id"])
             if not claimed:
                 logger.info("Skipping target #%d because it is already processing", target["id"])
                 return []
@@ -325,15 +330,12 @@ async def execute_batch_reports(target_ids: list[int] | None, account_ids: list[
                                 wait = config['account_cooldown'] - elapsed + random.uniform(0, 5)
                             else:
                                 wait = 0
-                                _account_last_report[account["id"]] = time.monotonic()
+                            # Reserve account immediately with future timestamp to prevent race condition
+                            _account_last_report[account["id"]] = time.monotonic() + wait
 
                         if wait > 0:
                             logger.info("[%s] Account cooldown, waiting %.1fs...", account["name"], wait)
                             await asyncio.sleep(wait)
-
-                        # Update timestamp after waiting
-                        async with _cooldown_lock:
-                            _account_last_report[account["id"]] = time.monotonic()
 
 
                         result = await execute_single_report(target, account)
@@ -342,9 +344,10 @@ async def execute_batch_reports(target_ids: list[int] | None, account_ids: list[
                         if resp.get("code") == 12019 and attempt < max_rate_retries:
                             wait = 90 + random.uniform(0, 15)
                             logger.info("[%s] Rate limited (12019), waiting %.0fs before retry %d...", account["name"], wait, attempt + 1)
-                            async with _cooldown_lock:
-                                _account_last_report[account["id"]] = time.monotonic() + wait
                             await asyncio.sleep(wait)
+                            # Update timestamp to current time after sleep to avoid double cooldown
+                            async with _cooldown_lock:
+                                _account_last_report[account["id"]] = time.monotonic()
                             continue
                         break
 
@@ -357,9 +360,10 @@ async def execute_batch_reports(target_ids: list[int] | None, account_ids: list[
                     await asyncio.sleep(_human_delay(config['min_delay'], config['max_delay']))
 
                 any_success = any(r["success"] for r in results)
-                await target_service.update_target_status(
-                    target["id"], "completed" if any_success else "failed"
-                )
+                if any_success:
+                    await target_service.update_target_status(target["id"], "completed")
+                else:
+                    await target_service.increment_retry_and_set_status(target["id"], "failed")
                 return results
             except Exception as e:
                 logger.error("process_target failed for target #%d: %s", target["id"], e)
@@ -486,10 +490,32 @@ async def scan_and_report_comments(
                 (aid, targets_created),
             )
             for target in pending:
+                claimed = await claim_target_for_processing(target["id"])
+                if not claimed:
+                    continue
+
+                # Account cooldown logic (same as main report flow)
+                config = await _get_delay_config()
+                async with _cooldown_lock:
+                    last_ts = _account_last_report.get(account["id"], 0)
+                    elapsed = time.monotonic() - last_ts
+                    if elapsed < config['account_cooldown']:
+                        wait = config['account_cooldown'] - elapsed + random.uniform(0, 5)
+                    else:
+                        wait = 0
+                    _account_last_report[account["id"]] = time.monotonic() + wait
+
+                if wait > 0:
+                    logger.info("[%s] Account cooldown, waiting %.1fs...", account["name"], wait)
+                    await asyncio.sleep(wait)
+
                 result = await execute_single_report(target, account)
                 reports_executed += 1
                 if result.get("success"):
                     reports_successful += 1
+                    await target_service.update_target_status(target["id"], "completed")
+                else:
+                    await target_service.increment_retry_and_set_status(target["id"], "failed")
                 config = await _get_delay_config()
                 await asyncio.sleep(_human_delay(config['min_delay'], config['max_delay']))
 

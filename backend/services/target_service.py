@@ -1,4 +1,5 @@
 """Target business logic."""
+import sqlite3
 from typing import Optional
 from backend.database import execute_query, execute_insert, execute_many
 
@@ -50,10 +51,20 @@ async def get_target(target_id: int):
 
 
 async def create_target(target_type: str, identifier: str, aid=None, reason_id=None, reason_content_id=None, reason_text=None, display_text=None):
-    target_id = await execute_insert(
-        "INSERT INTO targets (type, identifier, aid, reason_id, reason_content_id, reason_text, display_text) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (target_type, identifier, aid, reason_id, reason_content_id, reason_text, display_text),
-    )
+    try:
+        target_id = await execute_insert(
+            "INSERT INTO targets (type, identifier, aid, reason_id, reason_content_id, reason_text, display_text) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (target_type, identifier, aid, reason_id, reason_content_id, reason_text, display_text),
+        )
+    except sqlite3.IntegrityError as e:
+        if getattr(e, 'sqlite_errorcode', None) == 2067 or "UNIQUE constraint" in str(e):
+            # Target already exists, return existing
+            rows = await execute_query(
+                "SELECT * FROM targets WHERE type = ? AND identifier = ?",
+                (target_type, identifier),
+            )
+            return rows[0] if rows else None
+        raise
     rows = await execute_query("SELECT * FROM targets WHERE id = ?", (target_id,))
     return rows[0]
 
@@ -64,10 +75,15 @@ async def create_targets_batch(target_type: str, identifiers: list[str], reason_
         for identifier in identifiers
     ]
     await execute_many(
-        "INSERT INTO targets (type, identifier, aid, reason_id, reason_content_id, reason_text) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT OR IGNORE INTO targets (type, identifier, aid, reason_id, reason_content_id, reason_text) VALUES (?, ?, ?, ?, ?, ?)",
         params_list,
     )
-    return len(identifiers)
+    # Query actual inserted count (INSERT OR IGNORE silently skips duplicates)
+    result = await execute_query(
+        "SELECT COUNT(*) as count FROM targets WHERE type = ? AND identifier IN ({})".format(','.join('?' * len(identifiers))),
+        (target_type, *identifiers),
+    )
+    return result[0]["count"] if result else 0
 
 
 async def update_target(target_id: int, fields: dict):
