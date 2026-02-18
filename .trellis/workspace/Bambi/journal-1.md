@@ -1372,3 +1372,35 @@ Migrated Trellis shell scripts to Python, synced Codex skills/hooks, fixed assig
 ### Next Steps
 
 - None - task complete
+
+
+## Session 21: Fix scheduler regression tests and archive migration task
+
+**Date**: 2026-02-18
+**Task**: Fix scheduler regression tests and archive migration task
+
+### Summary
+
+Restored backward-compatible _claim_target_for_processing patch point in report_service, reran backend full test suite (52 passed), and archived 02-17-migrate-to-0.3.0-rc.5 as completed.
+
+### Main Changes
+
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3a8ec8d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

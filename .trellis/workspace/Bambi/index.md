@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 20
+- **Total Sessions**: 21
 - **Last Active**: 2026-02-18
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1374 | Active |
+| `journal-1.md` | ~1406 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits |
 |---|------|-------|---------|
+| 21 | 2026-02-18 | Fix scheduler regression tests and archive migration task | `3a8ec8d` |
 | 20 | 2026-02-18 | Trellis 0.3.0-rc.5 migration + bootstrap guidelines closure | `c8f59cc`, `0bfeaa3` |
 | 19 | 2026-02-15 | 修复自动回复模块规则匹配问题 | `23b69ad` |
 | 18 | 2026-02-15 | 调度器模块并发安全修复 | `16fc5a4` |
