@@ -299,6 +299,8 @@ def _services() -> Any:
         backend_log.close()
         frontend_log.close()
         _ab(["close"], check=False)
+        # Cleanup must run against the temporary test DB before backup restore.
+        _db_cleanup_prefix(PREFIX)
         if DB_PATH.exists():
             DB_PATH.unlink()
         if db_backup and db_backup.exists():
@@ -1429,11 +1431,8 @@ def main() -> int:
 
     results: list[CheckResult] = []
     passed = 0
-    try:
-        with _services():
-            results, passed = run_checks()
-    finally:
-        _db_cleanup_prefix(PREFIX)
+    with _services():
+        results, passed = run_checks()
 
     checklist, report = write_reports(results, passed)
     total = len(results)
