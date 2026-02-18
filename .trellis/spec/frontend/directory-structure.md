@@ -73,3 +73,27 @@ Page -> SWR hook (lib/swr.ts) -> fetch (lib/api.ts) -> API proxy -> Backend
 | Lib modules | camelCase `.ts` | `api.ts`, `swr.ts` |
 | Types | PascalCase interfaces | `Account`, `TargetListResponse` |
 | SWR hooks | `use{Resource}` | `useAccounts()` |
+
+---
+
+## Anti-Patterns to Avoid
+
+1. **Calling backend directly in page components**
+
+```typescript
+// Bad (inside app/*/page.tsx)
+const res = await fetch("http://127.0.0.1:8000/api/accounts");
+```
+
+```typescript
+// Good
+const { data: accounts = [] } = useAccounts();
+```
+
+2. **Putting shared components under route folders**
+- Shared widgets belong in `components/`, not `app/{feature}/`.
+- Route folder should only keep page-local composition code.
+
+3. **Duplicating API types outside `lib/types.ts`**
+- Keep shared contracts centralized in `lib/types.ts`.
+- Re-declaring the same interface in `page.tsx` causes drift and breaks sync.

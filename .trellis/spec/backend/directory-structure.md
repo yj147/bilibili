@@ -124,3 +124,29 @@ api/ → services/ → database.py
 3. Create router in `api/{resource}.py` — keep thin
 4. Register router in `main.py` with `app.include_router()`
 5. Add DB table in `db/schema.sql` if needed
+
+---
+
+## Anti-Patterns to Avoid
+
+1. **Direct DB calls from `api/` layer**
+
+```python
+# Bad (in api/*.py)
+from backend.database import execute_query
+rows = await execute_query("SELECT * FROM accounts")
+```
+
+```python
+# Good
+from backend.services.account_service import list_accounts
+rows = await list_accounts()
+```
+
+2. **Putting new request/response models in `models/`**
+- `models/` is legacy compatibility only.
+- New contracts go to `schemas/` with explicit Request/Response separation.
+
+3. **Importing `api/` modules from services**
+- Forbidden except `api.websocket.broadcast_log` integration.
+- Keep dependency direction one-way: `api -> services -> database/core`.

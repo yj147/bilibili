@@ -43,6 +43,47 @@
 
 ---
 
+## Real Code Examples
+
+1. **Literal unions mirror backend constraints**
+
+```typescript
+// frontend/src/lib/types.ts
+export type TargetStatus = "pending" | "processing" | "completed" | "failed";
+export type TargetType = "video" | "comment" | "user";
+```
+
+2. **Nullable vs optional fields**
+
+```typescript
+// Generated from backend Pydantic models
+export interface AccountPublic {
+  uid: number | null;
+  buvid3: string | null;
+  last_check_at: string | null;
+}
+
+export interface AccountUpdate {
+  name?: string | null;
+  is_active?: boolean | null;
+}
+```
+
+3. **Paged response contract matches backend**
+
+```typescript
+export interface TargetListResponse {
+  items: Target[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+```
+
+These map to backend models in `backend/models/target.py` and are synced by `scripts/sync-types.py`.
+
+---
+
 ## Common Mistakes
 
 1. **Using `any`** — use proper typed interfaces instead
