@@ -1278,3 +1278,64 @@ Browser E2E + API自动化测试全覆盖，修复6个bug，更新spec文档
 ### Next Steps
 
 - None - task complete
+
+## Session 19: 修复自动回复模块规则匹配问题
+
+**Date**: 2026-02-15
+**Task**: 修复自动回复模块规则匹配问题
+
+### Summary
+
+修复自动回复模块规则匹配失效问题，优化为单次遍历算法，添加数据库迁移系统，更新规范文档
+
+### Main Changes
+
+## 问题描述
+自动回复模块规则匹配失效，只发送默认回复，未匹配关键词规则。
+
+## 修复内容
+
+### 1. 核心算法优化
+- **单次遍历优化**：从两阶段迭代改为单次遍历 + 累加器模式
+- **性能提升**：消除 28-38% 性能下降
+- **类型安全**：添加 `AutoReplyConfig` TypedDict 类型注解
+
+### 2. 数据库迁移系统
+- **迁移执行机制**：在 `backend/main.py` lifespan 中添加 `run_migrations()`
+- **幂等性保证**：使用 `schema_migrations` 表 + `NOT EXISTS` 检查
+- **清理重复规则**：创建 002 迁移脚本清理重复默认回复规则
+
+### 3. 规范文档更新
+- **database-guidelines.md**：添加迁移系统完整文档
+- **quality-guidelines.md**：添加单次遍历优化模式文档
+
+## 修改文件
+- `backend/services/autoreply_polling.py:6-43` - 优化 match_reply_rule 算法
+- `backend/main.py:79-95` - 添加 run_migrations() 函数
+- `backend/db/migrations/002_cleanup_duplicate_default_replies.sql` - 迁移脚本
+- `backend/db/migrations/002_cleanup_duplicate_default_replies_down.sql` - 回滚脚本
+- `.trellis/spec/backend/database-guidelines.md` - 迁移系统文档
+- `.trellis/spec/backend/quality-guidelines.md` - 性能优化模式文档
+
+## 验证结果
+- ✅ 所有 52 个测试通过
+- ✅ 代码审查批准（code-reviewer agent）
+- ✅ 迁移脚本幂等性验证通过
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `23b69ad` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
