@@ -299,12 +299,19 @@ def _services() -> Any:
         backend_log.close()
         frontend_log.close()
         _ab(["close"], check=False)
+        cleanup_error: Exception | None = None
         # Cleanup must run against the temporary test DB before backup restore.
-        _db_cleanup_prefix(PREFIX)
-        if DB_PATH.exists():
-            DB_PATH.unlink()
-        if db_backup and db_backup.exists():
-            db_backup.replace(DB_PATH)
+        try:
+            _db_cleanup_prefix(PREFIX)
+        except Exception as exc:  # pragma: no cover - defensive recovery path
+            cleanup_error = exc
+        finally:
+            if DB_PATH.exists():
+                DB_PATH.unlink()
+            if db_backup and db_backup.exists():
+                db_backup.replace(DB_PATH)
+        if cleanup_error is not None:
+            raise RuntimeError(f"temporary DB cleanup failed: {cleanup_error}") from cleanup_error
 
 
 def _db_cleanup_prefix(prefix: str) -> None:
