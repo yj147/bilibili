@@ -1,6 +1,6 @@
 # PRD v2 Full Coverage Report
 
-Generated: 2026-02-18 14:37:19
+Generated: 2026-02-18 19:11:44
 
 | Metric | Value |
 |---|---|
@@ -29,7 +29,7 @@ Generated: 2026-02-18 14:37:19
 | TC-F-015 | PASS | live | first=202 |
 | TC-F-016 | PASS | simulated | batch queue also validated by multi-account simulation |
 | TC-F-017 | PASS | live | status=(200,200) |
-| TC-F-018 | PASS | live | real-account scan; fallback by simulation if false |
+| TC-F-018 | PASS | simulated | mocked scan success |
 | TC-F-019 | PASS | live | status=200 |
 | TC-F-020 | PASS | live | status=200 |
 | TC-F-021 | PASS | live | status=200 |
@@ -77,8 +77,8 @@ Generated: 2026-02-18 14:37:19
 | TC-ST-006 | PASS | simulated | before=2.0 after=4.0 |
 | TC-ST-007 | PASS | live | msgs=3 |
 | TC-ST-008 | PASS | live | check-all accepted after completion |
-| TC-RISK-001 | PASS | simulated | waits=[0.9994676309870556] |
-| TC-RISK-002 | PASS | simulated | attempts=2, sleeps=[0.9958543479879154, 90.0] |
+| TC-RISK-001 | PASS | simulated | waits=[0.9994235729973298] |
+| TC-RISK-002 | PASS | simulated | attempts=2, sleeps=[0.9955781259923242, 90.0] |
 | TC-RISK-003 | PASS | simulated | reason=4 |
 | TC-RISK-004 | PASS | simulated | non-finite rejected |
 

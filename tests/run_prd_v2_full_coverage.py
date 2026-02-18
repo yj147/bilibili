@@ -416,8 +416,12 @@ async def run_live_cases() -> None:
     ws_msgs: list[str] = []
     ws_ok = False
     hb_ok = False
+    ws_connect_kwargs: dict[str, Any] = {"open_timeout": 10, "close_timeout": 5}
+    if API_KEY:
+        ws_connect_kwargs["subprotocols"] = [f"token.{API_KEY}"]
+
     try:
-        async with websockets.connect("ws://127.0.0.1:8000/ws/logs", open_timeout=10, close_timeout=5) as ws:
+        async with websockets.connect("ws://127.0.0.1:8000/ws/logs", **ws_connect_kwargs) as ws:
             m = await asyncio.wait_for(ws.recv(), timeout=5)
             ws_msgs.append(m)
             await ws.send("ping")
