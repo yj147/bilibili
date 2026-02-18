@@ -5,6 +5,20 @@
 Bili-Sentinel 是一个面向 Bilibili 运营与风控场景的自动化控制台：  
 集中管理多账号、批量处理举报目标、定时执行任务、自动回复私信，并提供可视化状态与日志追踪。
 
+## 页面预览
+
+### 仪表盘
+
+![Bili-Sentinel Dashboard](assets/screenshots/dashboard.png)
+
+### 账号管理
+
+![Bili-Sentinel Accounts](assets/screenshots/accounts.png)
+
+### 目标管理
+
+![Bili-Sentinel Targets](assets/screenshots/targets.png)
+
 ## 技术栈
 
 - Backend: FastAPI (Python 3.12+) + SQLite
