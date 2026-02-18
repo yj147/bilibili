@@ -4,6 +4,16 @@ __pycache__
 *.pyc
 data/
 .trellis/
+.agent/
+.agents/
+.claude/
+.cursor/
+.omc/
+.playwright-mcp/
+staging_skills/
+docs/
+tests/*report*.md
+tests/*checklist*.md
 venv/
 *.egg-info
 .env

@@ -8,5 +8,9 @@ services:
       - ./data:/app/data
     environment:
       - SENTINEL_API_KEY=${SENTINEL_API_KEY:-}
-      - SENTINEL_DEBUG=false
+      - SENTINEL_DEBUG=${SENTINEL_DEBUG:-false}
+      - SENTINEL_HOST=${SENTINEL_HOST:-0.0.0.0}
+      - SENTINEL_PORT=${SENTINEL_PORT:-8000}
+      - FRONTEND_PORT=${FRONTEND_PORT:-3000}
+      - BACKEND_INTERNAL_URL=${BACKEND_INTERNAL_URL:-http://localhost:8000}
     restart: unless-stopped

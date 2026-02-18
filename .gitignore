@@ -45,5 +45,26 @@ test_*.js
 .omc/
 .claude/
 
-# Trellis tasks
-.trellis/tasks/
+# Local AI/tooling files (keep local, do not publish)
+.agent/
+.agents/
+.cursor/
+.playwright-mcp/
+.trellis/
+staging_skills/
+docs/
+
+# AI instruction docs
+AGENTS.md
+CLAUDE.md
+cursor_trellis_start_command.md
+FIX_REVIEW_REPORT.md
+**/AGENTS.md
+
+# Report artifacts
+tests/*report*.md
+tests/*checklist*.md
+
+# Windows metadata artifacts
+*.Zone.Identifier
+...
