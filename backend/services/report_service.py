@@ -78,6 +78,11 @@ async def claim_target_for_processing(target_id: int) -> bool:
     return await execute_in_transaction(_operation)
 
 
+async def _claim_target_for_processing(target_id: int) -> bool:
+    """Backward-compatible alias kept for existing tests/patch points."""
+    return await claim_target_for_processing(target_id)
+
+
 async def execute_single_report(target: dict, account: dict) -> dict:
     """Execute a single report using one account. Returns a result dict."""
     from backend.core.bilibili_client import BilibiliClient
@@ -310,7 +315,7 @@ async def execute_batch_reports(target_ids: list[int] | None, account_ids: list[
     async def process_target(target: dict) -> list[dict]:
         """Process a single target with all accounts until success."""
         async with semaphore:
-            claimed = await claim_target_for_processing(target["id"])
+            claimed = await _claim_target_for_processing(target["id"])
             if not claimed:
                 logger.info("Skipping target #%d because it is already processing", target["id"])
                 return []
@@ -490,7 +495,7 @@ async def scan_and_report_comments(
                 (aid, targets_created),
             )
             for target in pending:
-                claimed = await claim_target_for_processing(target["id"])
+                claimed = await _claim_target_for_processing(target["id"])
                 if not claimed:
                     continue
 

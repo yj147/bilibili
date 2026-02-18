@@ -1339,3 +1339,36 @@ Browser E2E + API自动化测试全覆盖，修复6个bug，更新spec文档
 ### Next Steps
 
 - None - task complete
+
+
+## Session 20: Trellis 0.3.0-rc.5 migration + bootstrap guidelines closure
+
+**Date**: 2026-02-18
+**Task**: Trellis 0.3.0-rc.5 migration + bootstrap guidelines closure
+
+### Summary
+
+Migrated Trellis shell scripts to Python, synced Codex skills/hooks, fixed assignee contamination and hook path stability, completed and archived 00-bootstrap-guidelines with added anti-patterns and real type-safety examples.
+
+### Main Changes
+
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c8f59cc` | (see git log) |
+| `0bfeaa3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
