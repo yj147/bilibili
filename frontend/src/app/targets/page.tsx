@@ -136,7 +136,10 @@ export default function TargetsPage() {
   };
 
   const handleBatchAdd = async () => {
-    const identifiers = batchData.identifiers.split("\n").map(s => s.trim()).filter(Boolean);
+    const identifiers = batchData.identifiers
+      .split(/[\s,;]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
     if (identifiers.length === 0) { toast.warning("请输入至少一个目标"); return; }
     try {
       await api.targets.createBatch({

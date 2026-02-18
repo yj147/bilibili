@@ -757,3 +757,20 @@ assert state_rows[0]["last_msg_ts"] == msg_ts  # With correct timestamp
 # Old (wrong) assertion:
 # assert state_rows == []  # State was NOT written — matches old behavior only
 ```
+
+### Gotcha: WebSocket Tests Must Send token Subprotocol When API Key Is Enabled
+
+**Problem**: If backend runs with `SENTINEL_API_KEY`, a WebSocket test that connects without `token.<api_key>` subprotocol may connect-close or never receive expected messages (`pong`/`heartbeat`).
+
+**Solution**: Build connect kwargs from auth config and pass `subprotocols` when API key is set.
+
+```python
+ws_connect_kwargs = {"open_timeout": 10, "close_timeout": 5}
+if API_KEY:
+    ws_connect_kwargs["subprotocols"] = [f"token.{API_KEY}"]
+
+async with websockets.connect("ws://127.0.0.1:8000/ws/logs", **ws_connect_kwargs) as ws:
+    ...
+```
+
+**Why**: Keeps test behavior aligned with runtime auth contract and prevents false negatives in auth-enabled environments.
