@@ -42,20 +42,6 @@ Bili-Sentinel 是一个面向 Bilibili 运营与风控场景的自动化控制�
 
 ---
 
-## README 验收标准（通过才算合格）
-
-以下 3 组检查全部通过，才算“文档可用”：
-
-1. **部署命令可执行**：`docker compose up --build -d` 成功
-2. **本地开发可启动**：后端 + 前端都能在本机正常启动
-3. **关键端点可 curl 验证**：至少通过以下检查
-   - `curl -fsS http://localhost:8000/health`
-   - `curl -fsS http://localhost:3000/api/system/info`
-
-> 本 README 命令最近一次在本地验证日期：`2026-02-20`（Linux, Python 3.12, Bun 1.3.8, Docker 29）。
-
----
-
 ## 一键部署（Docker，推荐）
 
 ### 0. 前置条件
@@ -87,6 +73,8 @@ docker compose up --build -d
 ```
 
 ### 5. 验证是否启动成功
+
+建议至少检查一次后端健康状态与前端代理链路：
 
 ```bash
 docker compose ps
@@ -221,7 +209,7 @@ bun run dev
 
 如果你本机没有 Bun，也可以临时使用 `npm install && npm run dev`。
 
-### 本地端点验收（建议单开第三个终端）
+### 启动后检查（建议单开第三个终端）
 
 ```bash
 curl -fsS http://127.0.0.1:8000/health
