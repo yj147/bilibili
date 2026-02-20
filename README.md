@@ -42,6 +42,20 @@ Bili-Sentinel 是一个面向 Bilibili 运营与风控场景的自动化控制�
 
 ---
 
+## README 验收标准（通过才算合格）
+
+以下 3 组检查全部通过，才算“文档可用”：
+
+1. **部署命令可执行**：`docker compose up --build -d` 成功
+2. **本地开发可启动**：后端 + 前端都能在本机正常启动
+3. **关键端点可 curl 验证**：至少通过以下检查
+   - `curl -fsS http://localhost:8000/health`
+   - `curl -fsS http://localhost:3000/api/system/info`
+
+> 本 README 命令最近一次在本地验证日期：`2026-02-20`（Linux, Python 3.12, Bun 1.3.8, Docker 29）。
+
+---
+
 ## 一键部署（Docker，推荐）
 
 ### 0. 前置条件
@@ -76,13 +90,20 @@ docker compose up --build -d
 
 ```bash
 docker compose ps
-curl http://localhost:8000/health
+curl -fsS http://localhost:8000/health
+curl -fsS http://localhost:3000/api/system/info
 ```
 
 ### 6. 打开系统
 
 - 前端：`http://localhost:3000`
 - 后端健康检查：`http://localhost:8000/health`
+
+如果你配置了 `SENTINEL_API_KEY`，记得带请求头验证：
+
+```bash
+curl -fsS -H "X-API-Key: ${SENTINEL_API_KEY}" http://localhost:3000/api/system/info
+```
 
 ---
 
@@ -175,6 +196,14 @@ tar -czf backup-data-$(date +%F).tar.gz data/
 
 ## 本地开发（非 Docker）
 
+### 0. 创建虚拟环境（推荐）
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+```
+
 ### 后端
 
 ```bash
@@ -191,6 +220,20 @@ bun run dev
 ```
 
 如果你本机没有 Bun，也可以临时使用 `npm install && npm run dev`。
+
+### 本地端点验收（建议单开第三个终端）
+
+```bash
+curl -fsS http://127.0.0.1:8000/health
+curl -fsS http://127.0.0.1:3000/api/system/info
+```
+
+如果启用了 `SENTINEL_API_KEY`，改为：
+
+```bash
+curl -fsS -H "X-API-Key: ${SENTINEL_API_KEY}" http://127.0.0.1:8000/api/system/info
+curl -fsS -H "X-API-Key: ${SENTINEL_API_KEY}" http://127.0.0.1:3000/api/system/info
+```
 
 本地默认访问：
 
